@@ -237,7 +237,9 @@ const TwoColumnJobSearchPage: React.FC = () => {
                           <div className="w-2 h-2 bg-blue-500 rounded-full" title="Clicked" />
                         )}
                         {interaction?.saved && (
-                          <Star className="w-3 h-3 text-yellow-500" title="Saved" />
+                          <div title="Saved">
+                            <Star className="w-3 h-3 text-yellow-500" />
+                          </div>
                         )}
                       </div>
                     </div>

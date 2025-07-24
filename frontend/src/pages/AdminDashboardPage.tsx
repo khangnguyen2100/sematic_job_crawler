@@ -133,7 +133,7 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const loadJobs = async (page: number = currentPage, source?: string) => {
+  const loadJobs = async (page: number = currentPage, _source?: string) => {
     setJobsLoading(true);
     try {
       // Mock data for demonstration
