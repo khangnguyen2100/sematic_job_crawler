@@ -6,6 +6,15 @@ export enum JobSource {
   OTHER = "Other"
 }
 
+export interface JobInteractionStatus {
+  viewed: boolean;
+  clicked: boolean;
+  applied: boolean;
+  saved: boolean;
+  view_count: number;
+  last_interaction?: string;
+}
+
 export interface Job {
   id?: string;
   title: string;
