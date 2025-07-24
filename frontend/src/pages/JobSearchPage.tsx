@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Briefcase, MapPin, Calendar, ExternalLink, Building2 } from 'lucide-react';
-import { SearchRequest, SearchResponse, Job, JobSource } from '@/types';
-import { jobsApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { jobsApi } from '@/services/api';
+import { Job, JobSource, SearchRequest, SearchResponse } from '@/types';
+import { Briefcase, Building2, Calendar, ExternalLink, MapPin, Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
 const JobCard: React.FC<{ job: Job }> = ({ job }) => {
   const handleJobClick = async () => {
@@ -25,6 +25,20 @@ const JobCard: React.FC<{ job: Job }> = ({ job }) => {
     }
   };
 
+  const getScoreColor = (score?: number) => {
+    if (!score) return 'bg-gray-100 text-gray-800';
+    if (score >= 0.8) return 'bg-green-100 text-green-800';
+    if (score >= 0.6) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-orange-100 text-orange-800';
+  };
+
+  const getScoreLabel = (score?: number) => {
+    if (!score) return 'No score';
+    if (score >= 0.8) return 'Excellent match';
+    if (score >= 0.6) return 'Good match';
+    return 'Fair match';
+  };
+
   return (
     <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={handleJobClick}>
       <CardHeader>
@@ -42,6 +56,16 @@ const JobCard: React.FC<{ job: Job }> = ({ job }) => {
             <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs">
               {job.source}
             </span>
+            {job.search_score && (
+              <div className="flex flex-col items-end gap-1">
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getScoreColor(job.search_score)}`}>
+                  {(job.search_score * 100).toFixed(1)}%
+                </span>
+                <span className="text-xs text-gray-500">
+                  {getScoreLabel(job.search_score)}
+                </span>
+              </div>
+            )}
             <ExternalLink className="h-4 w-4" />
           </div>
         </div>

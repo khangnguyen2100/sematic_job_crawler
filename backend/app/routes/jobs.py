@@ -4,8 +4,10 @@ from typing import List, Optional
 from app.models.schemas import Job, JobSource
 from app.services.marqo_service import MarqoService
 from app.services.analytics_service import AnalyticsService  
-from app.models.database import get_db
+from app.models.database import get_db, JobMetadataDB
 from app.utils.user_tracking import get_user_id
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 router = APIRouter()
 
@@ -15,6 +17,54 @@ def get_marqo_service():
 
 def get_analytics_service():
     return AnalyticsService()
+
+@router.get("/jobs/stats")
+async def get_jobs_stats(
+    marqo_service: MarqoService = Depends(get_marqo_service)
+):
+    """Get statistics about the job database"""
+    try:
+        stats = await marqo_service.get_index_stats()
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+@router.get("/jobs/db-stats")
+async def get_database_stats(
+    db: Session = Depends(get_db)
+):
+    """Get statistics about jobs stored in PostgreSQL database"""
+    try:
+        total_jobs = db.query(JobMetadataDB).count()
+        jobs_by_source = db.query(JobMetadataDB.source, func.count(JobMetadataDB.id).label('count')).group_by(JobMetadataDB.source).all()
+        
+        source_stats = {source: count for source, count in jobs_by_source}
+        
+        return {
+            "total_jobs_in_database": total_jobs,
+            "jobs_by_source": source_stats,
+            "note": "This shows jobs stored in PostgreSQL. Vector search data is in Marqo."
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get database stats: {str(e)}")
+
+@router.post("/jobs/recreate-index")
+async def recreate_index(
+    marqo_service: MarqoService = Depends(get_marqo_service)
+):
+    """Recreate the Marqo index with proper tensor fields configuration (admin endpoint)"""
+    try:
+        success = await marqo_service.recreate_index()
+        
+        if success:
+            return {"message": "Index recreated successfully with proper tensor fields configuration"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to recreate index")
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to recreate index: {str(e)}")
 
 @router.get("/jobs/{job_id}")
 async def get_job(
@@ -125,15 +175,3 @@ async def delete_job(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete job: {str(e)}")
-
-@router.get("/jobs/stats")
-async def get_jobs_stats(
-    marqo_service: MarqoService = Depends(get_marqo_service)
-):
-    """Get statistics about the job database"""
-    try:
-        stats = await marqo_service.get_index_stats()
-        return stats
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")

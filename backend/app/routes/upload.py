@@ -6,7 +6,8 @@ from datetime import datetime
 
 from app.models.schemas import JobCreate, JobSource, UploadResponse
 from app.services.marqo_service import MarqoService
-from app.models.database import get_db
+from app.models.database import get_db, JobMetadataDB
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -28,8 +29,9 @@ async def upload_csv(
         ..., 
         description="CSV file containing job data with columns: title, company, description, source, url"
     ),
+    source: JobSource = Form(JobSource.OTHER, description="Source of the job data"),
     marqo_service: MarqoService = Depends(get_marqo_service),
-    db = Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     ## Upload Jobs from CSV
@@ -126,13 +128,26 @@ async def upload_csv(
                 is_duplicate = await marqo_service.check_duplicate_job(job)
                 
                 if not is_duplicate:
-                    await marqo_service.add_job(job)
+                    # Add job to Marqo
+                    job_id = await marqo_service.add_job(job)
+                    
+                    # Store job metadata in PostgreSQL
+                    job_metadata = JobMetadataDB(
+                        job_id=job_id,
+                        source=job.source.value,
+                        original_url=job.original_url,
+                        crawl_date=datetime.utcnow()
+                    )
+                    db.add(job_metadata)
+                    db.commit()
+                    
                     processed_jobs += 1
                 else:
                     errors.append(f"Duplicate job skipped: {job.title} at {job.company_name}")
                     
             except Exception as e:
                 errors.append(f"Error adding job '{job.title}': {str(e)}")
+                db.rollback()  # Rollback database transaction on error
         
         return UploadResponse(
             message=f"Successfully processed {processed_jobs} jobs from CSV",

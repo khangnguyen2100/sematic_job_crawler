@@ -24,6 +24,7 @@ class Job(BaseModel):
     experience_level: Optional[str] = None  # Junior, Senior, etc.
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    search_score: Optional[float] = None  # Relevance score from search
 
 class JobCreate(BaseModel):
     title: str
@@ -74,3 +75,41 @@ class UploadResponse(BaseModel):
     message: str
     processed_jobs: int
     errors: List[str] = []
+
+# Admin Authentication Schemas
+class AdminLoginRequest(BaseModel):
+    username: str
+    password: str
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+
+# Admin Dashboard Schemas
+class AdminDashboardStats(BaseModel):
+    total_jobs: int
+    jobs_by_source: Dict[str, int]
+    recent_jobs: int  # Last 24 hours
+    pending_sync_jobs: int
+    last_sync_time: Optional[datetime] = None
+
+class JobSyncRequest(BaseModel):
+    sources: List[JobSource]
+    limit: Optional[int] = 100
+
+class JobSyncResponse(BaseModel):
+    message: str
+    synced_jobs: int
+    failed_sources: List[str] = []
+    
+class PaginatedJobsResponse(BaseModel):
+    jobs: List[Job]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+class JobManagementAction(BaseModel):
+    action: str  # 'delete', 'refresh', 'reindex'
+    job_ids: List[str]

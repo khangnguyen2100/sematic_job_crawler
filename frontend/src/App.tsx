@@ -1,7 +1,8 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import JobSearchPage from './pages/JobSearchPage';
+import { Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import './index.css';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import JobSearchPage from './pages/JobSearchPage';
 
 function App() {
   return (
@@ -9,6 +10,8 @@ function App() {
       <div className="App">
         <Routes>
           <Route path="/" element={<JobSearchPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         </Routes>
       </div>
     </Router>

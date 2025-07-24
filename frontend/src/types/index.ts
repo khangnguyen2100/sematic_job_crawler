@@ -20,6 +20,7 @@ export interface Job {
   experience_level?: string;
   created_at?: string;
   updated_at?: string;
+  search_score?: number;
 }
 
 export interface SearchRequest {

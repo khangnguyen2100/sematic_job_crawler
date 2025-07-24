@@ -1,5 +1,6 @@
+import { DashboardData, Job, JobSource, SearchRequest, SearchResponse, UploadResponse } from '@/types';
+import { AdminDashboardStats, AdminLoginRequest, AdminLoginResponse, JobSyncRequest, PaginatedJobsResponse } from '@/types/admin';
 import axios from 'axios';
-import { SearchRequest, SearchResponse, Job, UploadResponse, DashboardData, JobSource } from '@/types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -119,6 +120,80 @@ export const jobsApi = {
 
   triggerManualCrawl: async (): Promise<any> => {
     const response = await api.post('/analytics/crawler/trigger');
+    return response.data;
+  },
+};
+
+// Token storage
+let authToken: string | null = localStorage.getItem('admin_token');
+
+// Add token to requests
+api.interceptors.request.use(
+  (config) => {
+    if (authToken && config.url?.includes('/admin/')) {
+      config.headers.Authorization = `Bearer ${authToken}`;
+    }
+    console.log(`Making ${config.method?.toUpperCase()} request to ${config.url}`);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+export const adminApi = {
+  // Authentication
+  login: async (credentials: AdminLoginRequest): Promise<AdminLoginResponse> => {
+    const response = await api.post('/admin/login', credentials);
+    const data = response.data;
+    authToken = data.access_token;
+    localStorage.setItem('admin_token', data.access_token);
+    return data;
+  },
+
+  logout: () => {
+    authToken = null;
+    localStorage.removeItem('admin_token');
+  },
+
+  isAuthenticated: (): boolean => {
+    return !!authToken;
+  },
+
+  // Dashboard
+  getDashboardStats: async (): Promise<AdminDashboardStats> => {
+    const response = await api.get('/admin/dashboard/stats');
+    return response.data;
+  },
+
+  // Jobs Management
+  getJobs: async (page: number = 1, perPage: number = 20, source?: string): Promise<PaginatedJobsResponse> => {
+    const params: any = { page, per_page: perPage };
+    if (source) params.source = source;
+    
+    const response = await api.get('/admin/jobs', { params });
+    return response.data;
+  },
+
+  syncJobs: async (syncRequest: JobSyncRequest): Promise<any> => {
+    const response = await api.post('/admin/jobs/sync', syncRequest);
+    return response.data;
+  },
+
+  deleteJob: async (jobId: string): Promise<any> => {
+    const response = await api.delete(`/admin/jobs/${jobId}`);
+    return response.data;
+  },
+
+  manageJobs: async (action: string, jobIds: string[]): Promise<any> => {
+    const response = await api.post('/admin/jobs/manage', {
+      action,
+      job_ids: jobIds
+    });
+    return response.data;
+  },
+
+  // Analytics
+  getAnalyticsSummary: async (): Promise<any> => {
+    const response = await api.get('/admin/analytics/summary');
     return response.data;
   },
 };

@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
-from app.routes import search, jobs, upload, analytics
+from app.routes import search, jobs, upload, analytics, admin
 from app.services.marqo_service import MarqoService
 from app.scheduler.job_scheduler import JobScheduler
 from app.models.database import init_db
@@ -105,6 +105,10 @@ app = FastAPI(
             "name": "analytics",
             "description": "📊 Analytics, reporting, and crawler management",
         },
+        {
+            "name": "admin",
+            "description": "🔒 Admin dashboard and management operations (requires authentication)",
+        },
     ]
 )
 
@@ -135,6 +139,7 @@ app.include_router(search.router, prefix="/api/v1", tags=["search"])
 app.include_router(jobs.router, prefix="/api/v1", tags=["jobs"])
 app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
 app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
+app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 
 @app.get("/")
 async def root():
