@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.models.schemas import JobCreate, JobSource, UploadResponse
 from app.services.marqo_service import MarqoService
+from app.services.job_deduplication_service import JobDeduplicationService
 from app.models.database import get_db, JobMetadataDB
 from sqlalchemy.orm import Session
 
@@ -121,29 +122,26 @@ async def upload_csv(
         
         # Check for duplicates and add jobs
         processed_jobs = 0
+        dedup_service = JobDeduplicationService(db)
         
         for job in jobs:
             try:
-                # Check for duplicates
-                is_duplicate = await marqo_service.check_duplicate_job(job)
+                # Check for duplicates using deduplication service
+                is_new, result = await dedup_service.check_and_store_job(job)
                 
-                if not is_duplicate:
+                if is_new:
                     # Add job to Marqo
                     job_id = await marqo_service.add_job(job)
                     
-                    # Store job metadata in PostgreSQL
-                    job_metadata = JobMetadataDB(
-                        job_id=job_id,
-                        source=job.source.value,
-                        original_url=job.original_url,
-                        crawl_date=datetime.utcnow()
-                    )
-                    db.add(job_metadata)
-                    db.commit()
+                    # Update the stored job with Marqo ID
+                    job_entry = db.query(JobMetadataDB).filter(JobMetadataDB.id == result).first()
+                    if job_entry:
+                        job_entry.marqo_id = job_id
+                        db.commit()
                     
                     processed_jobs += 1
                 else:
-                    errors.append(f"Duplicate job skipped: {job.title} at {job.company_name}")
+                    errors.append(f"Duplicate job skipped: {result}")
                     
             except Exception as e:
                 errors.append(f"Error adding job '{job.title}': {str(e)}")

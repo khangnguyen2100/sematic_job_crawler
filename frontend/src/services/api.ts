@@ -196,6 +196,41 @@ export const adminApi = {
     const response = await api.get('/admin/analytics/summary');
     return response.data;
   },
+
+  // Crawl Logs
+  getCrawlLogs: async (params: {
+    site_name?: string;
+    crawler_type?: string;
+    status?: string;
+    date_from?: string;
+    date_to?: string;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<any> => {
+    const response = await api.get('/admin/crawl-logs', { params });
+    return response.data;
+  },
+
+  getCrawlLogsSummary: async (): Promise<any> => {
+    const response = await api.get('/admin/crawl-logs/dashboard/summary');
+    return response.data;
+  },
+
+  cleanupCrawlLogs: async (days?: number): Promise<any> => {
+    const params = days ? { days } : {};
+    const response = await api.delete('/admin/crawl-logs/cleanup', { params });
+    return response.data;
+  },
+
+  getCrawlLogById: async (logId: string): Promise<any> => {
+    const response = await api.get(`/admin/crawl-logs/${logId}`);
+    return response.data;
+  },
+
+  getCrawlStatistics: async (): Promise<any> => {
+    const response = await api.get('/admin/crawl-logs/statistics/sites');
+    return response.data;
+  },
 };
 
 export default api;

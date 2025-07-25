@@ -10,7 +10,6 @@ import {
   Download,
   ExternalLink,
   Filter,
-  LogOut,
   Plus,
   RefreshCw,
   Trash2,
@@ -227,38 +226,37 @@ const AdminDashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="p-6">
       {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-              <p className="mt-1 text-sm text-gray-500">Manage jobs and monitor platform analytics</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <Button
-                  onClick={() => setShowSyncDropdown(!showSyncDropdown)}
-                  disabled={syncLoading}
-                  className="flex items-center gap-2"
-                >
-                  {syncLoading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Syncing...
-                    </>
-                  ) : (
-                    <>
-                      <Plus className="h-4 w-4" />
-                      Sync Jobs
-                    </>
-                  )}
-                </Button>
-                
-                {showSyncDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-50">
-                    <div className="py-1">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-1 text-sm text-gray-500">Monitor platform analytics and manage jobs</p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end mb-6">
+        <div className="relative">
+          <Button
+            onClick={() => setShowSyncDropdown(!showSyncDropdown)}
+            disabled={syncLoading}
+            className="flex items-center gap-2"
+          >
+            {syncLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                Sync Jobs
+              </>
+            )}
+          </Button>
+          
+          {showSyncDropdown && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-50">
+              <div className="py-1">
                       <button
                         onClick={() => handleSyncJobs([JobSource.LINKEDIN])}
                         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -294,19 +292,11 @@ const AdminDashboardPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              
-              <Button variant="outline" onClick={handleLogout}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="space-y-6">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             title="Total Jobs"
             value={stats?.total_jobs.toLocaleString() || '0'}

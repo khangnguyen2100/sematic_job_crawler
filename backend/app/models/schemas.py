@@ -37,6 +37,7 @@ class JobCreate(BaseModel):
     salary: Optional[str] = None
     job_type: Optional[str] = None
     experience_level: Optional[str] = None
+    source_id: Optional[str] = None  # For deduplication
 
 class JobUpdate(BaseModel):
     title: Optional[str] = None
@@ -113,3 +114,59 @@ class PaginatedJobsResponse(BaseModel):
 class JobManagementAction(BaseModel):
     action: str  # 'delete', 'refresh', 'reindex'
     job_ids: List[str]
+
+# Crawl Log Schemas
+class CrawlLogResponse(BaseModel):
+    id: str
+    site_name: str
+    site_url: str
+    request_url: str
+    crawler_type: str
+    response_status: Optional[int] = None
+    response_time_ms: Optional[int] = None
+    jobs_found: int = 0
+    jobs_processed: int = 0
+    jobs_stored: int = 0
+    jobs_duplicated: int = 0
+    error_message: Optional[str] = None
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_ms: Optional[int] = None
+
+class CrawlLogListResponse(BaseModel):
+    logs: List[CrawlLogResponse]
+    total: int
+    limit: int
+    offset: int
+
+class CrawlDashboardSummary(BaseModel):
+    total_crawls_today: int
+    successful_crawls_today: int
+    failed_crawls_today: int
+    success_rate_today: float
+    total_jobs_found_today: int
+    total_jobs_stored_today: int
+    total_jobs_duplicated_today: int
+    active_crawlers: List[str]
+    recent_errors: List[Dict[str, Any]]
+
+class CrawlStatisticsResponse(BaseModel):
+    site_name: str
+    total_requests: int
+    successful_requests: int
+    failed_requests: int
+    success_rate: float
+    total_jobs_found: int
+    total_jobs_stored: int
+    average_response_time_ms: float
+
+# Job Deduplication Schemas
+class JobDuplicateResponse(BaseModel):
+    id: str
+    original_job_id: str
+    duplicate_source: str
+    duplicate_source_id: Optional[str] = None
+    duplicate_url: Optional[str] = None
+    detected_at: datetime
+    similarity_score: Optional[float] = None
+    duplicate_fields: Dict[str, Any]
