@@ -1,3 +1,4 @@
+import { JsonEditor, JsonViewer } from '@/components/JsonEditor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { adminApi } from '@/services/api';
@@ -132,7 +133,7 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const loadJobs = async (page: number = currentPage, source?: string) => {
+  const loadJobs = async (page: number = currentPage, _source?: string) => {
     setJobsLoading(true);
     try {
       // Mock data for demonstration
@@ -178,7 +179,8 @@ const AdminDashboardPage: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
+  // Logout function for future use
+  const _handleLogout = () => {
     adminApi.logout();
     navigate('/admin/login');
   };
@@ -474,6 +476,53 @@ const AdminDashboardPage: React.FC = () => {
                 )}
               </>
             )}
+          </CardContent>
+        </Card>
+
+        {/* JSON Editor Demo Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>JSON Editor Demo</CardTitle>
+            <CardDescription>
+              Test the JSON editor and viewer components with sample data
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-4">
+              <JsonEditor
+                data={{
+                  example: "This is sample data for testing",
+                  user: { id: 1, name: "Admin User" },
+                  settings: { theme: "dark", language: "en" }
+                }}
+                onSave={(data) => console.log('Saved data:', data)}
+                title="Edit Sample JSON"
+                trigger={<Button variant="outline">Edit JSON Data</Button>}
+              />
+              
+              <JsonEditor
+                data={{
+                  readonly: true,
+                  message: "This is read-only JSON data",
+                  timestamp: new Date().toISOString()
+                }}
+                readOnly={true}
+                title="View JSON Data"
+                trigger={<Button variant="outline">View JSON (Read-only)</Button>}
+              />
+            </div>
+            
+            <div>
+              <h4 className="text-sm font-medium mb-2">Inline JSON Viewer:</h4>
+              <JsonViewer 
+                data={{
+                  inline: true,
+                  viewer: "This JSON is displayed inline",
+                  features: ["syntax highlighting", "collapsible", "readonly"]
+                }}
+                height="150px"
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

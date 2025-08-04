@@ -2,7 +2,7 @@ import { DashboardData, Job, JobSource, SearchRequest, SearchResponse, UploadRes
 import { AdminDashboardStats, AdminLoginRequest, AdminLoginResponse, JobSyncRequest, PaginatedJobsResponse } from '@/types/admin';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
