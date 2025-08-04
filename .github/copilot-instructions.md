@@ -1,143 +1,103 @@
-# AI Copilot Instructions for Semantic Job Search Platform
+# Copilot Instructions - Job Search Platform
 
-## 🎯 Project Overview
-This is a **semantic job search platform** with FastAPI backend, React frontend, and vector search capabilities using Marqo. The platform crawls Vietnamese job sites and provides AI-powered search through natural language queries.
+## Architecture Overview
 
-## 🏗️ Architecture & Key Components
+This is a **semantic job search platform** with three core layers:
+- **Frontend**: React/TypeScript with dual interfaces (public search + admin dashboard)
+- **Backend**: FastAPI with crawler orchestration, semantic search, and analytics  
+- **Data Layer**: PostgreSQL + Marqo vector database for semantic search
 
-### Hybrid Development Setup
-- **Databases**: Run PostgreSQL & Marqo in Docker (`docker-compose.dev.yml`)
-- **Backend**: Local development with Poetry, hot reload, VS Code debugging
-- **Frontend**: Local Vite development server with proxy to backend
+Key architectural pattern: **Service-oriented with async background processing**
+- Global services (`marqo_service`, `job_scheduler`) initialized in `app/main.py` lifespan
+- Crawlers inherit from `BaseCrawler` and are orchestrated by `CrawlerManager`
+- All search operations go through `MarqoService` for vector embeddings
 
-### Core Services Architecture
-```
-MarqoService (vector search) ↔ CrawlerManager → BaseCrawler implementations
-     ↕                                    ↕
-AnalyticsService ↔ PostgreSQL DB ← SQLAlchemy models
-```
+## Critical Development Patterns
 
-## 🔧 Development Workflows
-
-### Essential Commands
-```bash
-# Start databases only
-./start-dev.sh
-
-# Backend development
-cd backend && ./run-dev.sh
-# OR use VS Code: F5 for debugging, Ctrl+Shift+P → "🐍 Run Backend (Local)"
-
-# Frontend development  
-cd frontend && yarn dev
-
-# Stop services
-./stop-dev.sh
-```
-
-### VS Code Integration
-- **Launch configs**: `🐍 Debug FastAPI Backend` & `🚀 Run FastAPI with Uvicorn`
-- **Tasks**: Start/stop services, run backend/frontend locally
-- **Environment**: Auto-loaded from `backend/.env.local` (filters comments with `grep -v '^#'`)
-
-## 🎯 Critical Patterns & Conventions
-
-### Port Configuration
-- **Backend**: Always use port **8002** (not 8000)
-- **Frontend**: Always use port **3030** (not 3000)
-- **CORS**: Configure for `http://localhost:3030` and `http://127.0.0.1:3030`
-
-### SQLAlchemy Model Requirements
-- **NEVER use `metadata` as column name** - reserved by SQLAlchemy. Use `interaction_metadata` instead
-- Models in `backend/app/models/database.py` use `interaction_metadata = Column(Text)`
-
-### Marqo Version Compatibility
+### Service Initialization & Dependencies
+Services are globally initialized in `main.py` lifespan and accessed via dependency functions:
 ```python
-# Always handle both old/new Marqo API versions:
-try:
-    # Try new API (2.22.0+)
-    self.client.create_index(index_name=name, settings={...})
-except TypeError:
-    # Fall back to old API
-    self.client.create_index(index_name=name, model="hf/all-MiniLM-L6-v2")
-```
+# In main.py
+marqo_service = MarqoService()
+job_scheduler = JobScheduler(marqo_service)
 
-### FastAPI Dependency Injection Pattern
-```python
-# All route files use this pattern:
+# In routes
 def get_marqo_service():
-    from app.main import marqo_service
     return marqo_service
-
-def get_analytics_service():
-    return AnalyticsService()
 ```
 
-### Frontend Module System
-- **Package.json**: `"type": "module"` - use ES modules everywhere
-- **Config files**: Use `export default` not `module.exports`
-- **Path aliases**: `@/*` maps to `./src/*` via Vite config
+### Adding New Job Crawlers
+1. Inherit from `BaseCrawler` in `app/crawlers/`
+2. Implement `crawl_jobs()` and `is_available()` methods
+3. Add to `CrawlerManager.crawlers` list 
+4. Configuration goes in `app/config/` following `topcv_config.py` pattern
 
-## 📁 Key File Locations
+### Database + Vector Search Integration
+- PostgreSQL stores job metadata and relationships
+- Marqo handles semantic search with embeddings
+- Jobs are added to both via `MarqoService.add_jobs_batch()`
+- Deduplication happens at both DB and vector level
 
-### Backend Structure
-- **Routes**: `backend/app/routes/{search,jobs,upload,analytics}.py`
-- **Services**: `backend/app/services/{marqo_service,analytics_service}.py`
-- **Models**: `backend/app/models/{schemas,database}.py`
-- **Crawlers**: `backend/app/crawlers/{base_crawler,job_crawlers,crawler_manager}.py`
+## Development Workflow
 
-### Configuration & Environment
-- **Dev environment**: `backend/.env.local` (comments filtered out)
-- **VS Code debug**: `.vscode/launch.json` (uses `debugpy`, not `python` type)
-- **Database**: PostgreSQL connection via SQLAlchemy, tables auto-created on startup
+### Running the Stack
+Use VS Code tasks for development:
+- **🐍 Run Backend**: Starts Docker services + Poetry backend with hot reload
+- **⚛️ Run Frontend**: Yarn dev server with Vite
 
-## 🔍 Search & Vector Operations
+Backend runs on `:8002`, Frontend on `:3030`, Marqo on `:8882`, PostgreSQL on `:5432`
 
-### Marqo Integration Pattern
-```python
-# Always use executor for sync Marqo operations:
-result = await asyncio.get_event_loop().run_in_executor(
-    self.executor,
-    lambda: self.client.index(self.index_name).search(...)
-)
-```
+### Configuration Management
+- Environment: `backend/.env` (copy from `.env.example`)
+- Constants: `backend/app/config/constants.py` for hardcoded values
+- Crawler configs: `backend/app/config/*_config.py` files
 
-### Job Data Flow
-1. **Crawlers** → Mock implementations with realistic data structure
-2. **MarqoService.add_job()** → Converts `JobCreate` to dict, stores in vector DB
-3. **Search** → Semantic search via `searchable_attributes=["title", "description", "company_name"]`
-4. **Analytics** → All interactions tracked in PostgreSQL
-
-## 🐛 Common Issues & Solutions
-
-### Poetry Package Mode Error
-```toml
-# In pyproject.toml, always include:
-[tool.poetry]
-package-mode = false
-
-# In Dockerfile:
-RUN poetry install --only=main --no-root
-```
-
-### Port Conflicts
+### Key Testing/Debug Commands
 ```bash
-# Kill existing processes:
-pkill -f uvicorn
-lsof -ti:8000 | xargs kill -9
+# Backend in Poetry environment
+cd backend && poetry run python -m pytest
+cd backend && poetry run uvicorn app.main:app --reload
+
+# Test specific crawler
+cd backend && poetry run python test_topcv_integration.py
+
+# Check services health
+curl http://localhost:8002/health
+curl http://localhost:8882/health
 ```
 
-### Import Errors
-- Missing `BackgroundTasks` from `fastapi`
-- Missing `get_db` from `app.models.database`
-- Use `Job` not `JobResponse` for response models
+## Frontend Architecture
 
-## 📊 Analytics & Tracking
-- **User tracking**: IP-based via `get_user_id(request)`
-- **Interactions**: `{"search", "view", "click"}` with metadata JSON
-- **Background tasks**: CSV processing, bulk operations
+React Router structure:
+- `/` → Job search (public)
+- `/admin/*` → Admin dashboard with nested routes in `AdminLayout`
 
-## 🎨 Frontend Specifics
-- **Proxy setup**: `/api` → `http://localhost:8002` via Vite config
-- **UI framework**: Shadcn components with Tailwind CSS
-- **State management**: React hooks, no external state library
+Key patterns:
+- API calls via `services/api.ts` using Axios
+- UI components from `components/ui/` (shadcn/ui pattern)
+- Type definitions in `types/` directory
+
+## Backend Route Organization
+
+Routes are modular in `app/routes/`:
+- `search.py` → Semantic search endpoints
+- `jobs.py` → CRUD operations
+- `analytics.py` → Dashboard data + manual crawler triggers
+- `admin.py` → Authentication and admin functions  
+- `upload.py` → Bulk CSV/JSON imports
+
+Each route file follows FastAPI router pattern and is included in `main.py`.
+
+## Scheduler & Background Jobs
+
+`JobScheduler` (APScheduler) runs:
+- Daily crawls at 00:00 and 12:00 UTC
+- Manual triggers via `POST /api/v1/analytics/crawler/trigger`
+- Graceful shutdown in app lifespan
+
+## Common Integration Points
+
+- **Marqo Index**: `job-index` with structured schema in `MarqoService._init_sync()`
+- **Database Models**: SQLAlchemy models in `models/database.py`, Pydantic schemas in `models/schemas.py`
+- **CORS**: Configured for `localhost:3030` in development
+- **Error Handling**: Consistent patterns across routes with proper HTTP status codes

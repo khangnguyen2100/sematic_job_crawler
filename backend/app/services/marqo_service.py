@@ -6,13 +6,14 @@ import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+from app.config.constants import MarqoConfig, get_marqo_url
 from app.models.schemas import Job, JobCreate, SearchRequest
 
 class MarqoService:
     def __init__(self):
-        self.marqo_url = os.getenv("MARQO_URL", "http://localhost:8882")
+        self.marqo_url = get_marqo_url()
         self.client = None
-        self.index_name = "jobs"
+        self.index_name = MarqoConfig.INDEX_NAME
         self.executor = ThreadPoolExecutor(max_workers=4)
 
     async def initialize(self):

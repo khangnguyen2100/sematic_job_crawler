@@ -5,6 +5,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import JobSearchPage from './pages/JobSearchPage';
 import CrawlLogsPage from './pages/admin/CrawlLogsPage';
+import DataSourcesPage from './pages/admin/DataSourcesPage';
 
 function App() {
   return (
@@ -19,6 +20,8 @@ function App() {
                 <Routes>
                   <Route path="login" element={<AdminLoginPage />} />
                   <Route path="dashboard" element={<AdminDashboardPage />} />
+                  <Route path="data-sources" element={<DataSourcesPage />} />
+                  <Route path="sources" element={<DataSourcesPage />} />
                   <Route path="crawl-logs" element={<CrawlLogsPage />} />
                 </Routes>
               </AdminLayout>

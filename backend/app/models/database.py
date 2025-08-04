@@ -6,8 +6,10 @@ import uuid
 from datetime import datetime
 import os
 
+from app.config.constants import get_database_url
+
 # Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://username:password@localhost:5432/job_crawler")
+DATABASE_URL = get_database_url()
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

@@ -7,17 +7,18 @@ from fastapi import HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
 
+from app.config.constants import AuthConfig, get_jwt_secret, get_admin_credentials
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT settings
-SECRET_KEY = os.getenv("JWT_SECRET", "your-super-secret-jwt-key-change-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours
+SECRET_KEY = get_jwt_secret()
+ALGORITHM = AuthConfig.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = AuthConfig.ACCESS_TOKEN_EXPIRE_HOURS * 60
 
 # Admin credentials from environment
-ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "123123")
+ADMIN_USERNAME, ADMIN_PASSWORD = get_admin_credentials()
 
 security = HTTPBearer()
 

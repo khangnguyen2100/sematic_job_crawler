@@ -76,7 +76,7 @@ async def get_crawler_status():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get crawler status: {str(e)}")
 
-@router.post("/analytics/crawler/trigger")
+@router.post("/analytics/crawler/trigger", response_model=dict)
 async def trigger_manual_crawl():
     """Manually trigger a crawl job"""
     try:
@@ -86,9 +86,16 @@ async def trigger_manual_crawl():
             raise HTTPException(status_code=503, detail="Scheduler not available")
         
         results = await job_scheduler.trigger_manual_crawl()
+        
+        # Convert CrawlResult to dict if needed
+        if hasattr(results, 'dict'):
+            results_dict = results.dict()
+        else:
+            results_dict = results
+            
         return {
             "message": "Manual crawl triggered",
-            "results": results,
+            "results": results_dict,
             "triggered_at": datetime.utcnow().isoformat()
         }
         

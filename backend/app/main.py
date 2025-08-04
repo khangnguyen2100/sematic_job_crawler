@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
+from app.config.constants import ServerConfig, get_cors_origins
 from app.routes import search, jobs, upload, analytics, admin, crawl_logs
 from app.services.marqo_service import MarqoService
 from app.scheduler.job_scheduler import JobScheduler
@@ -80,7 +81,7 @@ app = FastAPI(
     },
     servers=[
         {
-            "url": "http://localhost:8002",
+            "url": ServerConfig.DEV_SERVER_URL,
             "description": "Development server"
         }
     ],
@@ -115,7 +116,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(","),
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
