@@ -1,21 +1,11 @@
-import React from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { ReactNode } from 'react';
 import Sidebar from './Sidebar';
 
 interface AdminLayoutProps {
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
-  const location = useLocation();
-  
-  // Don't show sidebar on login page
-  const isLoginPage = location.pathname === '/admin/login';
-  
-  if (isLoginPage) {
-    return <>{children}</>;
-  }
-
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}

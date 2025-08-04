@@ -23,6 +23,19 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
+    
+    // Handle authentication errors
+    if (error.response?.status === 401 && error.config?.url?.includes('/admin/')) {
+      // Token is invalid or expired, clear it and redirect to login
+      authToken = null;
+      localStorage.removeItem('admin_token');
+      
+      // Only redirect if we're not already on the login page
+      if (window.location.pathname !== '/admin/login') {
+        window.location.href = '/admin/login';
+      }
+    }
+    
     return Promise.reject(error);
   }
 );
@@ -130,8 +143,14 @@ let authToken: string | null = localStorage.getItem('admin_token');
 // Add token to requests
 api.interceptors.request.use(
   (config) => {
-    if (authToken && config.url?.includes('/admin/')) {
-      config.headers.Authorization = `Bearer ${authToken}`;
+    // Get token from memory or localStorage
+    const token = authToken || localStorage.getItem('admin_token');
+    if (token && config.url?.includes('/admin/')) {
+      config.headers.Authorization = `Bearer ${token}`;
+      // Update in-memory token if it was retrieved from localStorage
+      if (!authToken) {
+        authToken = token;
+      }
     }
     console.log(`Making ${config.method?.toUpperCase()} request to ${config.url}`);
     return config;
@@ -155,7 +174,13 @@ export const adminApi = {
   },
 
   isAuthenticated: (): boolean => {
-    return !!authToken;
+    // Check both the in-memory token and localStorage
+    const token = authToken || localStorage.getItem('admin_token');
+    if (token && !authToken) {
+      // Update the in-memory token if it exists in localStorage but not in memory
+      authToken = token;
+    }
+    return !!token;
   },
 
   // Dashboard

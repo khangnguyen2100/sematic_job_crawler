@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { adminApi } from '@/services/api';
 import { AlertCircle, Eye, EyeOff, Lock, User } from 'lucide-react';
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const AdminLoginPage: React.FC = () => {
   const [credentials, setCredentials] = useState({ username: '', password: '' });
@@ -12,6 +12,10 @@ const AdminLoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Get the location the user was trying to access before being redirected to login
+  const from = (location.state as any)?.from?.pathname || '/admin/dashboard';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +29,8 @@ const AdminLoginPage: React.FC = () => {
 
     try {
       await adminApi.login(credentials);
-      navigate('/admin/dashboard');
+      // Redirect to the original location or dashboard
+      navigate(from, { replace: true });
     } catch (error: any) {
       setError(error.response?.data?.detail || 'Login failed. Please check your credentials.');
     } finally {
