@@ -39,6 +39,9 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   const isOpen = controlledIsOpen !== undefined ? controlledIsOpen : internalIsOpen;
   const onOpenChange = controlledOnOpenChange || setInternalIsOpen;
 
+  // Check if we're in controlled mode (external dialog management)
+  const isControlled = controlledIsOpen !== undefined && controlledOnOpenChange !== undefined;
+
   useEffect(() => {
     try {
       setJsonValue(JSON.stringify(data, null, 2));
@@ -164,6 +167,80 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   );
 
   // If trigger is provided, wrap in Dialog root
+  // If we're in controlled mode (external dialog management), just return the content
+  if (isControlled && isOpen) {
+    return (
+      <div className="flex flex-col gap-4">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+            {error}
+          </div>
+        )}
+        
+        <div className="border rounded-lg overflow-hidden" style={{ height: '400px' }}>
+          <Editor
+            height="400px"
+            defaultLanguage="json"
+            value={jsonValue}
+            onChange={handleEditorChange}
+            onMount={handleEditorMount}
+            options={{
+              readOnly,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              fontSize: 14,
+              lineNumbers: 'on',
+              renderWhitespace: 'selection',
+              automaticLayout: true,
+              formatOnPaste: true,
+              formatOnType: true,
+            }}
+            theme="vs-dark"
+          />
+        </div>
+        
+        <div className="flex items-center justify-between pt-4">
+          <div className="flex gap-2">
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={formatJson}
+                disabled={!!error}
+              >
+                Format JSON
+              </Button>
+            )}
+          </div>
+          
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              {readOnly ? 'Close' : 'Cancel'}
+            </Button>
+            {!readOnly && onSave && (
+              <Button
+                type="button"
+                onClick={handleSave}
+                disabled={!!error}
+              >
+                Save Changes
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  // If we're in controlled mode but closed, return nothing
+  if (isControlled && !isOpen) {
+    return null;
+  }
+
   if (trigger) {
     return (
       <Dialog open={isOpen} onOpenChange={onOpenChange}>

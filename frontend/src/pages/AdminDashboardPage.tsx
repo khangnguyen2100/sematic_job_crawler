@@ -100,6 +100,7 @@ const AdminDashboardPage: React.FC = () => {
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [syncLoading, setSyncLoading] = useState(false);
   const [showSyncDropdown, setShowSyncDropdown] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -113,7 +114,14 @@ const AdminDashboardPage: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      // Mock data for now since backend might have DB issues
+      setError(null);
+      const data = await adminApi.getDashboardStats();
+      setStats(data);
+    } catch (error: any) {
+      console.error('Failed to load dashboard stats:', error);
+      setError('Failed to load dashboard statistics. Using sample data.');
+      
+      // Fallback to sample data if API fails
       const mockStats: AdminDashboardStats = {
         total_jobs: 110,
         jobs_by_source: {
@@ -126,17 +134,22 @@ const AdminDashboardPage: React.FC = () => {
         pending_sync_jobs: 0
       };
       setStats(mockStats);
-    } catch (error) {
-      console.error('Failed to load dashboard stats:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadJobs = async (page: number = currentPage, _source?: string) => {
+  const loadJobs = async (page: number = currentPage, source?: string) => {
     setJobsLoading(true);
     try {
-      // Mock data for demonstration
+      setError(null);
+      const data = await adminApi.getJobs(page, 20, source);
+      setJobs(data);
+    } catch (error: any) {
+      console.error('Failed to load jobs:', error);
+      setError('Failed to load jobs. Please try again.');
+      
+      // Fallback to sample data if API fails
       const mockJobs: PaginatedJobsResponse = {
         jobs: [
           {
@@ -169,20 +182,13 @@ const AdminDashboardPage: React.FC = () => {
         total: 110,
         page: page,
         per_page: 20,
-        total_pages: 6
+        total_pages: 6,
+        current_page: page
       };
       setJobs(mockJobs);
-    } catch (error) {
-      console.error('Failed to load jobs:', error);
     } finally {
       setJobsLoading(false);
     }
-  };
-
-  // Logout function for future use
-  const _handleLogout = () => {
-    adminApi.logout();
-    navigate('/admin/login');
   };
 
   const handleSyncJobs = async (sources: JobSource[]) => {
@@ -235,6 +241,13 @@ const AdminDashboardPage: React.FC = () => {
         <p className="mt-1 text-sm text-gray-500">Monitor platform analytics and manage jobs</p>
       </div>
 
+      {/* Error Display */}
+      {error && (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+          <p className="text-sm text-yellow-800">{error}</p>
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex justify-end mb-6">
         <div className="relative">
@@ -259,41 +272,41 @@ const AdminDashboardPage: React.FC = () => {
           {showSyncDropdown && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-50">
               <div className="py-1">
-                      <button
-                        onClick={() => handleSyncJobs([JobSource.LINKEDIN])}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Sync from LinkedIn
-                      </button>
-                      <button
-                        onClick={() => handleSyncJobs([JobSource.TOPCV])}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Sync from TopCV
-                      </button>
-                      <button
-                        onClick={() => handleSyncJobs([JobSource.ITVIEC])}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Sync from ITViec
-                      </button>
-                      <button
-                        onClick={() => handleSyncJobs([JobSource.VIETNAMWORKS])}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Sync from VietnamWorks
-                      </button>
-                      <hr className="my-1" />
-                      <button
-                        onClick={() => handleSyncJobs([JobSource.LINKEDIN, JobSource.TOPCV, JobSource.ITVIEC, JobSource.VIETNAMWORKS])}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-medium"
-                      >
-                        Sync from All Sources
-                      </button>
-                    </div>
-                  </div>
-                )}
+                <button
+                  onClick={() => handleSyncJobs([JobSource.LINKEDIN])}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sync from LinkedIn
+                </button>
+                <button
+                  onClick={() => handleSyncJobs([JobSource.TOPCV])}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sync from TopCV
+                </button>
+                <button
+                  onClick={() => handleSyncJobs([JobSource.ITVIEC])}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sync from ITViec
+                </button>
+                <button
+                  onClick={() => handleSyncJobs([JobSource.VIETNAMWORKS])}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Sync from VietnamWorks
+                </button>
+                <hr className="my-1" />
+                <button
+                  onClick={() => handleSyncJobs([JobSource.LINKEDIN, JobSource.TOPCV, JobSource.ITVIEC, JobSource.VIETNAMWORKS])}
+                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 font-medium"
+                >
+                  Sync from All Sources
+                </button>
               </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-6">

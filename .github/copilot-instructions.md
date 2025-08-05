@@ -67,9 +67,12 @@ curl http://localhost:8882/health
 
 # Frontend linting (REQUIRED after any frontend changes)
 cd frontend && yarn lint
+
+# TypeScript compilation check (REQUIRED after any frontend changes)
+cd frontend && yarn tsc
 ```
 
-**⚠️ IMPORTANT**: Always run `yarn lint` after making frontend changes. ESLint must pass with zero warnings before considering any frontend task complete.
+**⚠️ IMPORTANT**: Always run both `yarn lint` AND `yarn tsc` after making frontend changes. ESLint must pass with zero warnings AND TypeScript must compile without errors before considering any frontend task complete.
 
 ## Frontend Architecture
 
@@ -84,29 +87,36 @@ Key patterns:
 
 ### Frontend Code Quality Requirements
 
-**CRITICAL**: When making ANY changes to frontend code, you MUST run ESLint and fix all errors before completing the task:
+**CRITICAL**: When making ANY changes to frontend code, you MUST run both ESLint and TypeScript compilation checks and fix all errors before completing the task:
 
 ```bash
 # Run from frontend directory
 cd frontend && yarn lint
-# OR
+cd frontend && yarn tsc
+# OR alternatively
 cd frontend && npx eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0
+cd frontend && npx tsc --noEmit
 ```
 
 **Required workflow for frontend changes**:
 1. Make your code changes
-2. Run `yarn lint` to check for ESLint errors
-3. Fix any ESLint errors found
-4. Verify lint passes with `--max-warnings 0`
-5. Only then consider the task complete
+2. Run `yarn tsc` to check for TypeScript compilation errors
+3. Fix any TypeScript errors found
+4. Run `yarn lint` to check for ESLint errors
+5. Fix any ESLint errors found
+6. Verify both `yarn tsc` and `yarn lint` pass with no errors/warnings
+7. Only then consider the task complete
 
 **Common fixes needed**:
-- Unused variables: prefix with `_` (e.g., `_unusedVar`)
-- Missing dependencies in useEffect: add to dependency array or use ESLint disable comment
-- TypeScript `any` types: replace with proper types when possible
-- Import/export issues: ensure all imports are used
+- **TypeScript errors**: Undefined properties, type mismatches, missing type annotations
+- **Unused variables**: prefix with `_` (e.g., `_unusedVar`)
+- **Missing dependencies** in useEffect: add to dependency array or use ESLint disable comment
+- **TypeScript `any` types**: replace with proper types when possible
+- **Import/export issues**: ensure all imports are used
+- **Null/undefined safety**: add proper type guards and optional chaining
 
 **ESLint Configuration**: The project uses `@typescript-eslint/parser` with React hooks and TypeScript rules enabled.
+**TypeScript Configuration**: Strict mode enabled with comprehensive type checking.
 
 ## Backend Route Organization
 

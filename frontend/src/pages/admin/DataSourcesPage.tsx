@@ -1,16 +1,21 @@
+import { JsonEditor } from '@/components/JsonEditor';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { JOB_SOURCES, MOCK_DATES, SOURCE_CONFIGURATION, UI_MESSAGES } from '@/config/constants';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { adminApi } from '@/services/api';
-import { JobSource } from '@/types';
 import {
-  AlertCircle,
   CheckCircle,
   Database,
+  Edit,
   Globe,
   Plus,
   RefreshCw,
   Settings,
+  TestTube,
+  Trash2,
   XCircle
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
@@ -18,117 +23,102 @@ import { useNavigate } from 'react-router-dom';
 
 interface DataSource {
   id: string;
-  name: string;
-  type: JobSource;
-  url: string;
-  status: 'active' | 'inactive' | 'error';
-  lastCrawl?: Date;
-  jobsCount: number;
-  description: string;
+  site_name: string;
+  site_url: string;
+  config: any;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 const DataSourceCard: React.FC<{ 
   source: DataSource; 
-  onSync: (source: JobSource) => void; 
-  onToggle: (id: string) => void;
-  onSettings: (source: DataSource) => void;
-}> = ({ source, onSync, onToggle, onSettings }) => {
+  onEdit: (source: DataSource) => void;
+  onDelete: (source: DataSource) => void;
+  onTest: (source: DataSource) => void;
+  onToggleActive: (source: DataSource) => void;
+}> = ({ source, onEdit, onDelete, onTest, onToggleActive }) => {
   const getStatusIcon = () => {
-    switch (source.status) {
-      case 'active':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'inactive':
-        return <XCircle className="h-5 w-5 text-gray-400" />;
-      case 'error':
-        return <AlertCircle className="h-5 w-5 text-red-500" />;
-    }
-  };
-
-  const getStatusText = () => {
-    switch (source.status) {
-      case 'active':
-        return 'Active';
-      case 'inactive':
-        return 'Inactive';
-      case 'error':
-        return 'Error';
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (source.status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'inactive':
-        return 'bg-gray-100 text-gray-800';
-      case 'error':
-        return 'bg-red-100 text-red-800';
+    if (source.is_active) {
+      return <CheckCircle className="h-5 w-5 text-green-500" />;
+    } else {
+      return <XCircle className="h-5 w-5 text-gray-400" />;
     }
   };
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Database className="h-5 w-5 text-blue-600" />
-            </div>
+          <div className="flex items-center gap-2">
+            {getStatusIcon()}
             <div>
-              <CardTitle className="text-lg">{source.name}</CardTitle>
-              <CardDescription className="flex items-center gap-2">
-                {getStatusIcon()}
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor()}`}>
-                  {getStatusText()}
-                </span>
+              <CardTitle className="text-lg">{source.site_name}</CardTitle>
+              <CardDescription>
+                {source.is_active ? 'Active' : 'Inactive'}
               </CardDescription>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onSync(source.type)}
-              disabled={source.status === 'inactive'}
+              onClick={() => onTest(source)}
+              title="Test connection"
             >
-              <RefreshCw className="h-4 w-4" />
+              <TestTube className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => onSettings(source)}
+              onClick={() => onEdit(source)}
+              title="Edit configuration"
             >
-              <Settings className="h-4 w-4" />
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onDelete(source)}
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">{source.description}</p>
-          
           <div className="flex items-center gap-2 text-sm">
             <Globe className="h-4 w-4 text-gray-400" />
             <a 
-              href={source.url} 
+              href={source.site_url} 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline"
+              className="text-blue-600 hover:underline truncate"
             >
-              {source.url}
+              {source.site_url}
             </a>
           </div>
           
           <div className="grid grid-cols-2 gap-4 pt-3 border-t">
             <div>
-              <p className="text-sm font-medium text-gray-900">{source.jobsCount.toLocaleString()}</p>
-              <p className="text-xs text-gray-500">Jobs Collected</p>
+              <p className="text-sm font-medium text-gray-900">Status</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Switch
+                  checked={source.is_active}
+                  onCheckedChange={() => onToggleActive(source)}
+                />
+                <span className="text-xs text-gray-500">
+                  {source.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">
-                {source.lastCrawl ? source.lastCrawl.toLocaleDateString() : 'Never'}
+              <p className="text-sm font-medium text-gray-900">Updated</p>
+              <p className="text-xs text-gray-500">
+                {new Date(source.updated_at).toLocaleDateString()}
               </p>
-              <p className="text-xs text-gray-500">Last Crawl</p>
             </div>
           </div>
         </div>
@@ -140,8 +130,19 @@ const DataSourceCard: React.FC<{
 const DataSourcesPage: React.FC = () => {
   const [sources, setSources] = useState<DataSource[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
+  const [editingSource, setEditingSource] = useState<DataSource | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isJsonEditorOpen, setIsJsonEditorOpen] = useState(false);
+  const [currentConfig, setCurrentConfig] = useState<any>({});
   const navigate = useNavigate();
+
+  // Form state for create/edit
+  const [formData, setFormData] = useState({
+    site_name: '',
+    site_url: '',
+    config: {},
+    is_active: true
+  });
 
   useEffect(() => {
     if (!adminApi.isAuthenticated()) {
@@ -149,193 +150,137 @@ const DataSourcesPage: React.FC = () => {
       return;
     }
     loadDataSources();
-    loadStats();
   }, [navigate]);
 
   const loadDataSources = async () => {
     try {
-      // Get dashboard stats to populate job counts
-      const dashboardStats = await adminApi.getDashboardStats();
-      
-      // Create data sources based on the stats from backend
-      const sourcesFromStats: DataSource[] = Object.entries(dashboardStats.jobs_by_source || {}).map(([sourceName, jobCount]) => {
-        const sourceType = mapSourceNameToEnum(sourceName);
-        return {
-          id: sourceName.toLowerCase(),
-          name: sourceName,
-          type: sourceType,
-          url: getSourceUrl(sourceType),
-          status: 'active' as const,
-          lastCrawl: new Date(), // Using current date since we don't have this info yet
-          jobsCount: jobCount as number,
-          description: getSourceDescription(sourceType)
-        };
-      });
-      
-      setSources(sourcesFromStats);
+      setLoading(true);
+      const data = await adminApi.getDataSources();
+      setSources(data);
     } catch (error) {
       console.error('Failed to load data sources:', error);
-      // Fallback to mock data if API fails
-      const mockSources: DataSource[] = [
-        {
-          id: '1',
-          name: JOB_SOURCES.LINKEDIN.name,
-          type: JobSource.LINKEDIN,
-          url: JOB_SOURCES.LINKEDIN.url,
-          status: 'active',
-          lastCrawl: MOCK_DATES.LINKEDIN_LAST_CRAWL,
-          jobsCount: 0,
-          description: JOB_SOURCES.LINKEDIN.description
-        },
-        {
-          id: '2',
-          name: JOB_SOURCES.TOPCV.name,
-          type: JobSource.TOPCV,
-          url: JOB_SOURCES.TOPCV.url,
-          status: 'active',
-          lastCrawl: MOCK_DATES.TOPCV_LAST_CRAWL,
-          jobsCount: 0,
-          description: JOB_SOURCES.TOPCV.description
-        },
-        {
-          id: '3',
-          name: JOB_SOURCES.ITVIEC.name,
-          type: JobSource.ITVIEC,
-          url: JOB_SOURCES.ITVIEC.url,
-          status: 'active',
-          lastCrawl: MOCK_DATES.ITVIEC_LAST_CRAWL,
-          jobsCount: 0,
-          description: JOB_SOURCES.ITVIEC.description
-        },
-        {
-          id: '4',
-          name: JOB_SOURCES.VIETNAMWORKS.name,
-          type: JobSource.VIETNAMWORKS,
-          url: JOB_SOURCES.VIETNAMWORKS.url,
-          status: 'active',
-          lastCrawl: MOCK_DATES.VIETNAMWORKS_LAST_CRAWL,
-          jobsCount: 0,
-          description: JOB_SOURCES.VIETNAMWORKS.description
-        }
-      ];
-      setSources(mockSources);
+      // Fallback to empty array if API fails
+      setSources([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Helper function to map source names to JobSource enum
-  const mapSourceNameToEnum = (sourceName: string): JobSource => {
-    switch (sourceName) {
-      case 'LinkedIn':
-        return JobSource.LINKEDIN;
-      case 'TopCV':
-        return JobSource.TOPCV;
-      case 'ITViec':
-        return JobSource.ITVIEC;
-      case 'VietnamWorks':
-        return JobSource.VIETNAMWORKS;
-      default:
-        return JobSource.OTHER;
-    }
-  };
-
-  // Helper functions for source information
-  const getSourceUrl = (sourceType: JobSource): string => {
-    switch (sourceType) {
-      case JobSource.LINKEDIN:
-        return JOB_SOURCES.LINKEDIN.url;
-      case JobSource.TOPCV:
-        return JOB_SOURCES.TOPCV.url;
-      case JobSource.ITVIEC:
-        return JOB_SOURCES.ITVIEC.url;
-      case JobSource.VIETNAMWORKS:
-        return JOB_SOURCES.VIETNAMWORKS.url;
-      default:
-        return JOB_SOURCES.OTHER.url;
-    }
-  };
-
-  const getSourceDescription = (sourceType: JobSource): string => {
-    switch (sourceType) {
-      case JobSource.LINKEDIN:
-        return JOB_SOURCES.LINKEDIN.description;
-      case JobSource.TOPCV:
-        return JOB_SOURCES.TOPCV.description;
-      case JobSource.ITVIEC:
-        return JOB_SOURCES.ITVIEC.description;
-      case JobSource.VIETNAMWORKS:
-        return JOB_SOURCES.VIETNAMWORKS.description;
-      default:
-        return JOB_SOURCES.OTHER.description;
-    }
-  };
-
-  const loadStats = async () => {
+  const handleCreateSource = async () => {
     try {
-      const dashboardStats = await adminApi.getDashboardStats();
-      setStats(dashboardStats);
+      await adminApi.createDataSource(formData);
+      await loadDataSources();
+      setIsCreateDialogOpen(false);
+      resetForm();
     } catch (error) {
-      console.error('Failed to load stats:', error);
+      console.error('Failed to create data source:', error);
+      alert('Failed to create data source. Please check the console for details.');
     }
   };
 
-  const handleSyncSource = async (sourceType: JobSource) => {
+  const handleEditSource = (source: DataSource) => {
+    setEditingSource(source);
+    setFormData({
+      site_name: source.site_name,
+      site_url: source.site_url,
+      config: source.config,
+      is_active: source.is_active
+    });
+    setCurrentConfig(source.config);
+  };
+
+  const handleUpdateSource = async () => {
+    if (!editingSource) return;
+    
     try {
-      await adminApi.syncJobs({ sources: [sourceType] });
-      await loadDataSources(); // Refresh data
-      await loadStats(); // Refresh stats
+      await adminApi.updateDataSource(editingSource.site_name, formData);
+      await loadDataSources();
+      setEditingSource(null);
+      resetForm();
     } catch (error) {
-      console.error('Failed to sync source:', error);
+      console.error('Failed to update data source:', error);
+      alert('Failed to update data source. Please check the console for details.');
     }
   };
 
-  const handleToggleSource = async (sourceId: string) => {
+  const handleDeleteSource = async (source: DataSource) => {
+    if (!confirm(`Are you sure you want to delete "${source.site_name}"?`)) {
+      return;
+    }
+
     try {
-      // In real implementation, this would call an API to toggle source status
-      setSources(prev => prev.map(source => 
-        source.id === sourceId 
-          ? { ...source, status: source.status === 'active' ? 'inactive' : 'active' as any }
-          : source
-      ));
+      await adminApi.deleteDataSource(source.site_name);
+      await loadDataSources();
     } catch (error) {
-      console.error('Failed to toggle source:', error);
+      console.error('Failed to delete data source:', error);
+      alert('Failed to delete data source. Please check the console for details.');
     }
   };
 
-  const handleSyncAll = async () => {
+  const handleTestSource = async (source: DataSource) => {
     try {
-      const activeSources = sources
-        .filter(source => source.status === 'active')
-        .map(source => source.type);
+      const result = await adminApi.testDataSource(source.site_name);
       
-      if (activeSources.length > 0) {
-        await adminApi.syncJobs({ sources: activeSources });
-        await loadDataSources();
-        await loadStats();
+      const status = result.is_available ? 'Available ✅' : 'Unavailable ❌';
+      let details = '';
+      
+      if (result.is_available) {
+        details = `Status: ${result.status_code}, Response time: ${result.response_time_ms}ms`;
+        if (result.final_url && result.final_url !== source.site_url) {
+          details += `\nRedirected to: ${result.final_url}`;
+        }
+        if (result.note) {
+          details += `\nNote: ${result.note}`;
+        }
+      } else {
+        details = result.error 
+          ? `Error: ${result.error}` 
+          : `Status: ${result.status_code}, Response time: ${result.response_time_ms}ms`;
+        if (result.note) {
+          details += `\nNote: ${result.note}`;
+        }
       }
+      
+      alert(`Test Result for ${source.site_name}:\n${status}\n${details}`);
     } catch (error) {
-      console.error('Failed to sync all sources:', error);
+      console.error('Failed to test data source:', error);
+      alert('Failed to test data source connectivity.');
     }
   };
 
-  const handleAddSource = () => {
-    // For now, show an alert with available sources
-    // In a real implementation, this would open a modal or form
-    alert(`${UI_MESSAGES.ADD_SOURCE.title}:\n\n${UI_MESSAGES.ADD_SOURCE.content}`);
+  const handleToggleActive = async (source: DataSource) => {
+    try {
+      await adminApi.updateDataSource(source.site_name, {
+        is_active: !source.is_active
+      });
+      await loadDataSources();
+    } catch (error) {
+      console.error('Failed to toggle data source:', error);
+    }
   };
 
-  const handleSourceSettings = (source: DataSource) => {
-    // For now, show source configuration options
-    // In a real implementation, this would open a settings modal
-    const configOptions = UI_MESSAGES.SETTINGS.configurationOptions.map(option => `- ${option}`).join('\n');
-    alert(`Settings for ${source.name}:\n\n` +
-          `Status: ${source.status}\n` +
-          `Jobs Count: ${source.jobsCount}\n` +
-          `URL: ${source.url}\n` +
-          `Last Crawl: ${source.lastCrawl?.toLocaleDateString() || 'Never'}\n\n` +
-          `Configuration options:\n${configOptions}`);
+  const resetForm = () => {
+    setFormData({
+      site_name: '',
+      site_url: '',
+      config: {},
+      is_active: true
+    });
+    setCurrentConfig({});
   };
+
+  const handleConfigSave = (newConfig: any) => {
+    setFormData(prev => ({ ...prev, config: newConfig }));
+    setCurrentConfig(newConfig);
+    setIsJsonEditorOpen(false);
+  };
+
+  const openConfigEditor = () => {
+    setCurrentConfig(formData.config);
+    setIsJsonEditorOpen(true);
+  };
+
+  const activeSources = sources.filter(source => source.is_active);
 
   if (loading) {
     return (
@@ -348,32 +293,28 @@ const DataSourcesPage: React.FC = () => {
     );
   }
 
-  const activeSources = sources.filter(s => s.status === 'active');
-  const totalJobs = sources.reduce((sum, source) => sum + source.jobsCount, 0);
-
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Data Sources</h1>
-        <p className="mt-1 text-sm text-gray-500">Configure and manage job crawling sources</p>
-      </div>
-
-      {/* Actions */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={handleAddSource}>
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Data Sources</h1>
+          <p className="text-gray-600 mt-1">Manage crawler configurations and data source settings</p>
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Source
           </Button>
+          <Button onClick={loadDataSources}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
         </div>
-        <Button onClick={handleSyncAll}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Sync All Active Sources
-        </Button>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -402,19 +343,7 @@ const DataSourcesPage: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Jobs</p>
-                <p className="text-2xl font-bold text-gray-900">{totalJobs.toLocaleString()}</p>
-              </div>
-              <Globe className="h-8 w-8 text-purple-600" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Last Sync</p>
+                <p className="text-sm font-medium text-gray-600">Last Updated</p>
                 <p className="text-2xl font-bold text-gray-900">Today</p>
               </div>
               <RefreshCw className="h-8 w-8 text-orange-600" />
@@ -424,46 +353,188 @@ const DataSourcesPage: React.FC = () => {
       </div>
 
       {/* Data Sources Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {sources.map((source) => (
           <DataSourceCard
             key={source.id}
             source={source}
-            onSync={handleSyncSource}
-            onToggle={handleToggleSource}
-            onSettings={handleSourceSettings}
+            onEdit={handleEditSource}
+            onDelete={handleDeleteSource}
+            onTest={handleTestSource}
+            onToggleActive={handleToggleActive}
           />
         ))}
       </div>
 
-      {/* Source Configuration */}
-      <Card className="mt-8">
-        <CardHeader>
-          <CardTitle>Source Configuration</CardTitle>
-          <CardDescription>
-            Configure crawling settings and schedules for each data source
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      {sources.length === 0 && (
+        <Card>
+          <CardContent className="p-8 text-center">
+            <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No data sources configured</h3>
+            <p className="text-gray-600 mb-4">
+              Get started by adding your first data source configuration.
+            </p>
+            <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Data Source
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Create Data Source Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add New Data Source</DialogTitle>
+            <DialogDescription>
+              Configure a new data source for job crawling.
+            </DialogDescription>
+          </DialogHeader>
+          
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Crawling Schedule</h4>
-                <p className="text-sm text-gray-600">
-                  {SOURCE_CONFIGURATION.DEFAULT_CRAWL_SCHEDULE}.
-                  You can manually trigger crawls at any time using the sync buttons above.
-                </p>
+                <Label htmlFor="site_name">Site Name</Label>
+                <Input
+                  id="site_name"
+                  value={formData.site_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, site_name: e.target.value }))}
+                  placeholder="e.g., TopCV"
+                />
               </div>
               <div>
-                <h4 className="font-medium text-gray-900 mb-2">Data Retention</h4>
-                <p className="text-sm text-gray-600">
-                  {SOURCE_CONFIGURATION.DATA_RETENTION_DESCRIPTION}
-                </p>
+                <Label htmlFor="site_url">Site URL</Label>
+                <Input
+                  id="site_url"
+                  value={formData.site_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, site_url: e.target.value }))}
+                  placeholder="https://example.com"
+                />
               </div>
             </div>
+            
+            <div>
+              <Label>Configuration</Label>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  readOnly
+                  value={Object.keys(formData.config).length > 0 ? 'Configuration set' : 'No configuration'}
+                  className="flex-1"
+                />
+                <Button onClick={openConfigEditor} variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Edit Config
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_active"
+                checked={formData.is_active}
+                onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, is_active: checked }))}
+              />
+              <Label htmlFor="is_active">Active</Label>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateSource}>
+              Create Source
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Data Source Dialog */}
+      <Dialog open={!!editingSource} onOpenChange={(open) => !open && setEditingSource(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Data Source</DialogTitle>
+            <DialogDescription>
+              Update the configuration for {editingSource?.site_name}.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit_site_name">Site Name</Label>
+                <Input
+                  id="edit_site_name"
+                  value={formData.site_name}
+                  onChange={(e) => setFormData(prev => ({ ...prev, site_name: e.target.value }))}
+                  placeholder="e.g., TopCV"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit_site_url">Site URL</Label>
+                <Input
+                  id="edit_site_url"
+                  value={formData.site_url}
+                  onChange={(e) => setFormData(prev => ({ ...prev, site_url: e.target.value }))}
+                  placeholder="https://example.com"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <Label>Configuration</Label>
+              <div className="flex gap-2 mt-2">
+                <Input
+                  readOnly
+                  value={Object.keys(formData.config).length > 0 ? 'Configuration set' : 'No configuration'}
+                  className="flex-1"
+                />
+                <Button onClick={openConfigEditor} variant="outline">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Edit Config
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="edit_is_active"
+                checked={formData.is_active}
+                onCheckedChange={(checked: boolean) => setFormData(prev => ({ ...prev, is_active: checked }))}
+              />
+              <Label htmlFor="edit_is_active">Active</Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingSource(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateSource}>
+              Update Source
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* JSON Editor for Configuration */}
+      <Dialog open={isJsonEditorOpen} onOpenChange={setIsJsonEditorOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Edit Data Source Configuration</DialogTitle>
+            <DialogDescription>
+              Edit JSON data and click save when finished
+            </DialogDescription>
+          </DialogHeader>
+          <JsonEditor
+            isOpen={isJsonEditorOpen}
+            onOpenChange={setIsJsonEditorOpen}
+            data={currentConfig}
+            onSave={handleConfigSave}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

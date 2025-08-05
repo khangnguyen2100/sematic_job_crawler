@@ -118,12 +118,9 @@ const AdminLoginPage: React.FC = () => {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
-            <p>Default credentials:</p>
-            <p className="font-mono text-xs bg-gray-100 p-2 rounded mt-1">
-              Username: admin<br />
-              Password: 123123
-            </p>
+          {/* Development hint - remove in production */}
+          <div className="mt-6 text-center text-xs text-gray-400">
+            <p>Contact administrator for credentials</p>
           </div>
         </CardContent>
       </Card>

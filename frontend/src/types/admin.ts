@@ -1,4 +1,11 @@
-import { Job, JobSource } from './index';
+import { Job as BaseJob, JobSource } from './index';
+
+// Extended Job interface for admin with additional fields
+export interface Job extends BaseJob {
+  is_deleted?: boolean;
+  is_active?: boolean;
+  admin_notes?: string;
+}
 
 // Admin types for TypeScript
 export interface AdminLoginRequest {
@@ -31,4 +38,5 @@ export interface PaginatedJobsResponse {
   page: number;
   per_page: number;
   total_pages: number;
+  current_page: number;
 }

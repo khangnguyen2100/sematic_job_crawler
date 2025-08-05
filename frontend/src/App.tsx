@@ -5,8 +5,10 @@ import './index.css';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import JobSearchPage from './pages/JobSearchPage';
+import AdminJobsTest from './pages/admin/AdminJobsTest';
 import CrawlLogsPage from './pages/admin/CrawlLogsPage';
 import DataSourcesPage from './pages/admin/DataSourcesPage';
+import JobsPage from './pages/admin/JobsPage';
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
                 <AdminLayout>
                   <Routes>
                     <Route path="dashboard" element={<AdminDashboardPage />} />
+                    <Route path="jobs" element={<JobsPage />} />
+                    <Route path="jobs-test" element={<AdminJobsTest />} />
                     <Route path="data-sources" element={<DataSourcesPage />} />
                     <Route path="sources" element={<DataSourcesPage />} />
                     <Route path="crawl-logs" element={<CrawlLogsPage />} />

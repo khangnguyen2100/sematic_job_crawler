@@ -9,19 +9,41 @@ const api = axios.create({
   timeout: 30000,
 });
 
-// Request interceptor for logging
+// Retry configuration
+const RETRY_DELAY = 1000;
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Request interceptor for logging and retries
 api.interceptors.request.use(
   (config) => {
     console.log(`Making ${config.method?.toUpperCase()} request to ${config.url}`);
+    
+    // Add retry counter to headers for tracking
+    config.headers = config.headers || {};
+    if (!config.headers['x-retry-count']) {
+      config.headers['x-retry-count'] = '0';
+    }
+    
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response interceptor for error handling
+// Response interceptor for error handling and retries
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config;
+    
+    // Check if we should retry
+    if (error.response?.status >= 500 && config && !config._retry) {
+      config._retry = true;
+      console.log(`Retrying request to ${config.url} due to server error`);
+      await sleep(RETRY_DELAY);
+      return api(config);
+    }
+    
     console.error('API Error:', error.response?.data || error.message);
     
     // Handle authentication errors
@@ -34,6 +56,15 @@ api.interceptors.response.use(
       if (window.location.pathname !== '/admin/login') {
         window.location.href = '/admin/login';
       }
+    }
+    
+    // Enhance error message for better UX
+    if (error.response?.status === 0 || error.code === 'NETWORK_ERROR') {
+      error.message = 'Network error - please check your connection';
+    } else if (error.response?.status >= 500) {
+      error.message = 'Server error - please try again later';
+    } else if (error.response?.status === 404) {
+      error.message = 'Resource not found';
     }
     
     return Promise.reject(error);
@@ -133,6 +164,17 @@ export const jobsApi = {
 
   triggerManualCrawl: async (): Promise<any> => {
     const response = await api.post('/analytics/crawler/trigger');
+    return response.data;
+  },
+
+  // Database and job management endpoints
+  getDbStats: async (): Promise<any> => {
+    const response = await api.get('/jobs/db-stats');
+    return response.data;
+  },
+
+  recreateIndex: async (): Promise<any> => {
+    const response = await api.post('/jobs/recreate-index');
     return response.data;
   },
 };
@@ -254,6 +296,57 @@ export const adminApi = {
 
   getCrawlStatistics: async (): Promise<any> => {
     const response = await api.get('/admin/crawl-logs/statistics/sites');
+    return response.data;
+  },
+
+  // Data Sources
+  getDataSources: async (): Promise<any> => {
+    const response = await api.get('/admin/data-sources/');
+    return response.data;
+  },
+
+  createDataSource: async (dataSource: {
+    site_name: string;
+    site_url: string;
+    config: any;
+    is_active?: boolean;
+  }): Promise<any> => {
+    const response = await api.post('/admin/data-sources/', dataSource);
+    return response.data;
+  },
+
+  getDataSource: async (siteName: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}`);
+    return response.data;
+  },
+
+  updateDataSource: async (siteName: string, dataSource: {
+    site_name?: string;
+    site_url?: string;
+    config?: any;
+    is_active?: boolean;
+  }): Promise<any> => {
+    const response = await api.put(`/admin/data-sources/${siteName}`, dataSource);
+    return response.data;
+  },
+
+  deleteDataSource: async (siteName: string): Promise<any> => {
+    const response = await api.delete(`/admin/data-sources/${siteName}`);
+    return response.data;
+  },
+
+  testDataSource: async (siteName: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}/test`);
+    return response.data;
+  },
+
+  bulkCreateDataSources: async (dataSources: Array<{
+    site_name: string;
+    site_url: string;
+    config: any;
+    is_active?: boolean;
+  }>): Promise<any> => {
+    const response = await api.post('/admin/data-sources/bulk-create', dataSources);
     return response.data;
   },
 };
