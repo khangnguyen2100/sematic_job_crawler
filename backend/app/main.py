@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
 from app.config.constants import ServerConfig, get_cors_origins
-from app.routes import search, jobs, upload, analytics, admin, crawl_logs
+from app.routes import search, jobs, upload, analytics, admin, crawl_logs, data_sources
 from app.services.marqo_service import MarqoService
 from app.scheduler.job_scheduler import JobScheduler
 from app.models.database import init_db
@@ -142,6 +142,7 @@ app.include_router(upload.router, prefix="/api/v1", tags=["upload"])
 app.include_router(analytics.router, prefix="/api/v1", tags=["analytics"])
 app.include_router(admin.router, prefix="/api/v1", tags=["admin"])
 app.include_router(crawl_logs.router, prefix="/api/v1/admin/crawl-logs", tags=["admin", "crawl-logs"])
+app.include_router(data_sources.router, prefix="/api/v1", tags=["admin", "data-sources"])
 
 @app.get("/")
 async def root():

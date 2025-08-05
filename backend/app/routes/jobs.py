@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from typing import List, Optional
 
-from app.models.schemas import Job, JobSource
+from app.models.schemas import Job, JobSource, SearchRequest
 from app.services.marqo_service import MarqoService
 from app.services.analytics_service import AnalyticsService  
 from app.models.database import get_db, JobMetadataDB
@@ -127,7 +127,7 @@ async def track_job_click(
         raise HTTPException(status_code=500, detail=f"Failed to track click: {str(e)}")
 
 @router.get(
-    "/",
+    "/jobs",
     response_model=list[Job],
     summary="📋 Get All Jobs",
     description="Retrieve all jobs from the database with optional filtering",
@@ -138,6 +138,7 @@ async def get_jobs(
     skip: int = Query(0, ge=0, description="Number of jobs to skip for pagination"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of jobs to return"),
     source: Optional[str] = Query(None, description="Filter by job source (e.g., 'linkedin', 'topcv')"),
+    marqo_service: MarqoService = Depends(get_marqo_service),
     db = Depends(get_db)
 ):
     """
@@ -156,6 +157,22 @@ async def get_jobs(
     - `itviec` - ITViec tech jobs
     - `vietnamworks` - VietnamWorks general jobs
     """
+    try:
+        # Create a SearchRequest to get jobs with optional filtering
+        search_request = SearchRequest(
+            query="*",  # Wildcard query to get all jobs
+            sources=[JobSource(source)] if source else None,
+            location="",
+            limit=limit,
+            offset=skip
+        )
+        
+        search_result = await marqo_service.search_jobs(search_request)
+        
+        return search_result.get("jobs", [])
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch jobs: {str(e)}")
 
 @router.delete("/jobs/{job_id}")
 async def delete_job(

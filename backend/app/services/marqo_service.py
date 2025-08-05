@@ -192,8 +192,7 @@ class MarqoService:
             )
             
             if result:
-                job_data = result.get("_source", {})
-                job = Job(**job_data)
+                job = Job(**result)
                 job.id = job_id
                 return job
             return None

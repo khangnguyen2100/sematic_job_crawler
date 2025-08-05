@@ -60,6 +60,11 @@ async def search_jobs(
         # Get user ID for tracking
         user_id = get_user_id(request)
         
+        # Handle empty query by providing recent jobs
+        if not search_request.query.strip():
+            # For empty queries, return recent jobs
+            search_request.query = "*"  # Wildcard search for recent jobs
+        
         # Perform search
         results = await marqo_service.search_jobs(search_request)
         

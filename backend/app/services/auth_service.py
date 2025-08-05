@@ -20,7 +20,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = AuthConfig.ACCESS_TOKEN_EXPIRE_HOURS * 60
 # Admin credentials from environment
 ADMIN_USERNAME, ADMIN_PASSWORD = get_admin_credentials()
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 class AuthService:
     @staticmethod
@@ -73,7 +73,7 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
+def get_current_admin(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)) -> Dict[str, Any]:
     """Dependency to get current authenticated admin"""
     if not credentials:
         raise HTTPException(
@@ -82,11 +82,15 @@ def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(securi
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    payload = AuthService.verify_token(credentials.credentials)
-    if payload.get("sub") != ADMIN_USERNAME:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-    
-    return payload
+    try:
+        payload = AuthService.verify_token(credentials.credentials)
+        if payload.get("sub") != ADMIN_USERNAME:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return payload
+    except HTTPException:
+        # Re-raise authentication errors from verify_token
+        raise

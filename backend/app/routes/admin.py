@@ -109,12 +109,18 @@ async def get_admin_jobs(
         # Convert to Job objects
         jobs = []
         for job_data in jobs_data:
+            # Use database ID if marqo_id is None
+            job_id = job_data.marqo_id if job_data.marqo_id else str(job_data.id)
+            
+            # Handle None posted_date
+            posted_date = job_data.posted_date if job_data.posted_date else job_data.created_at
+            
             job = Job(
-                id=job_data.marqo_id,
+                id=job_id,
                 title=job_data.title,
                 description=job_data.description,
                 company_name=job_data.company_name,
-                posted_date=job_data.posted_date,
+                posted_date=posted_date,
                 source=JobSource(job_data.source),
                 original_url=job_data.original_url,
                 location=job_data.location,
@@ -134,7 +140,8 @@ async def get_admin_jobs(
             total=total,
             page=page,
             per_page=per_page,
-            total_pages=total_pages
+            total_pages=total_pages,
+            current_page=page
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get jobs: {str(e)}")

@@ -4,7 +4,7 @@ import pandas as pd
 import io
 from datetime import datetime
 
-from app.models.schemas import JobCreate, JobSource, UploadResponse
+from app.models.schemas import JobCreate, JobSource, UploadResponse, JobBulkUpload
 from app.services.marqo_service import MarqoService
 from app.services.job_deduplication_service import JobDeduplicationService
 from app.models.database import get_db, JobMetadataDB
@@ -17,7 +17,7 @@ def get_marqo_service():
     return marqo_service
 
 @router.post(
-    "/csv",
+    "/upload/csv",
     response_model=UploadResponse,
     summary="📁 Upload Jobs CSV",
     description="Upload and process job data from CSV file with automatic indexing",
@@ -70,6 +70,19 @@ async def upload_csv(
         
         # Validate required columns
         required_columns = ['title', 'description', 'company_name', 'original_url']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        # Check for alternative column names and rename them
+        column_mappings = {
+            'company': 'company_name',
+            'url': 'original_url'
+        }
+        
+        for old_name, new_name in column_mappings.items():
+            if old_name in df.columns and new_name not in df.columns:
+                df = df.rename(columns={old_name: new_name})
+        
+        # Re-check for missing columns after mapping
         missing_columns = [col for col in required_columns if col not in df.columns]
         
         if missing_columns:
@@ -162,31 +175,42 @@ async def upload_csv(
 
 @router.post("/upload/json", response_model=UploadResponse)
 async def upload_jobs_json(
-    jobs_data: List[JobCreate],
-    marqo_service: MarqoService = Depends(get_marqo_service)
+    jobs_payload: JobBulkUpload,
+    marqo_service: MarqoService = Depends(get_marqo_service),
+    db: Session = Depends(get_db)
 ):
     """Upload jobs from JSON data"""
     
-    if not jobs_data:
+    if not jobs_payload.jobs:
         raise HTTPException(status_code=400, detail="No jobs provided")
     
     try:
         processed_jobs = 0
         errors = []
+        dedup_service = JobDeduplicationService(db)
         
-        for i, job in enumerate(jobs_data):
+        for i, job in enumerate(jobs_payload.jobs):
             try:
-                # Check for duplicates
-                is_duplicate = await marqo_service.check_duplicate_job(job)
+                # Check for duplicates and add jobs
+                is_new, result = await dedup_service.check_and_store_job(job)
                 
-                if not is_duplicate:
-                    await marqo_service.add_job(job)
+                if is_new:
+                    # Add job to Marqo
+                    job_id = await marqo_service.add_job(job)
+                    
+                    # Update the stored job with Marqo ID
+                    job_entry = db.query(JobMetadataDB).filter(JobMetadataDB.id == result).first()
+                    if job_entry:
+                        job_entry.marqo_id = job_id
+                        db.commit()
+                    
                     processed_jobs += 1
                 else:
                     errors.append(f"Job {i + 1}: Duplicate skipped - {job.title} at {job.company_name}")
                     
             except Exception as e:
                 errors.append(f"Job {i + 1}: Error adding '{job.title}' - {str(e)}")
+                db.rollback()  # Rollback database transaction on error
         
         return UploadResponse(
             message=f"Successfully processed {processed_jobs} jobs from JSON",

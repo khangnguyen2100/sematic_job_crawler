@@ -43,7 +43,17 @@ class JobMetadataDB(Base):
     company_name = Column(String(200))
     description = Column(Text)
     marqo_id = Column(String(255), index=True)
+    
+    # Additional job details
+    posted_date = Column(DateTime)
+    location = Column(String(200))
+    salary = Column(String(100))
+    job_type = Column(String(50))
+    experience_level = Column(String(50))
+    
+    # System fields
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class JobDuplicateDB(Base):
     """Track duplicate jobs that were detected and skipped"""
@@ -101,6 +111,18 @@ class CrawlStatisticsDB(Base):
     average_response_time_ms = Column(DECIMAL(10,2))
     total_data_size_mb = Column(DECIMAL(10,2))
     last_updated = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+class CrawlerConfigDB(Base):
+    """Store crawler configurations for different job sites"""
+    __tablename__ = "crawler_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    site_name = Column(String(100), nullable=False, unique=True)
+    site_url = Column(Text, nullable=False)
+    config = Column(JSONB, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 async def init_db():
     """Initialize database tables"""

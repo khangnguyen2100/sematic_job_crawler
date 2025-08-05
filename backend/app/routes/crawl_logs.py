@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional, List
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.database import get_db
@@ -179,7 +179,7 @@ async def get_site_statistics(
         from sqlalchemy import func
         from app.models.database import CrawlStatisticsDB
         
-        cutoff_date = datetime.now() - datetime.timedelta(days=days)
+        cutoff_date = datetime.now() - timedelta(days=days)
         
         stats = db.query(
             CrawlStatisticsDB.site_name,

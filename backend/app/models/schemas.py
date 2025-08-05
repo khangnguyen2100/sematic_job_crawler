@@ -52,7 +52,7 @@ class JobUpdate(BaseModel):
     experience_level: Optional[str] = None
 
 class SearchRequest(BaseModel):
-    query: str = Field(..., min_length=1, max_length=1000)
+    query: str = Field(..., max_length=1000)
     sources: Optional[List[JobSource]] = None
     limit: Optional[int] = Field(default=10, ge=1, le=100)
     offset: Optional[int] = Field(default=0, ge=0)
@@ -76,6 +76,9 @@ class UploadResponse(BaseModel):
     message: str
     processed_jobs: int
     errors: List[str] = []
+
+class JobBulkUpload(BaseModel):
+    jobs: List[JobCreate]
 
 # Admin Authentication Schemas
 class AdminLoginRequest(BaseModel):
@@ -110,6 +113,7 @@ class PaginatedJobsResponse(BaseModel):
     page: int
     per_page: int
     total_pages: int
+    current_page: int
 
 class JobManagementAction(BaseModel):
     action: str  # 'delete', 'refresh', 'reindex'

@@ -64,7 +64,12 @@ cd backend && poetry run python test_topcv_integration.py
 # Check services health
 curl http://localhost:8002/health
 curl http://localhost:8882/health
+
+# Frontend linting (REQUIRED after any frontend changes)
+cd frontend && yarn lint
 ```
+
+**⚠️ IMPORTANT**: Always run `yarn lint` after making frontend changes. ESLint must pass with zero warnings before considering any frontend task complete.
 
 ## Frontend Architecture
 
@@ -76,6 +81,32 @@ Key patterns:
 - API calls via `services/api.ts` using Axios
 - UI components from `components/ui/` (shadcn/ui pattern)
 - Type definitions in `types/` directory
+
+### Frontend Code Quality Requirements
+
+**CRITICAL**: When making ANY changes to frontend code, you MUST run ESLint and fix all errors before completing the task:
+
+```bash
+# Run from frontend directory
+cd frontend && yarn lint
+# OR
+cd frontend && npx eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0
+```
+
+**Required workflow for frontend changes**:
+1. Make your code changes
+2. Run `yarn lint` to check for ESLint errors
+3. Fix any ESLint errors found
+4. Verify lint passes with `--max-warnings 0`
+5. Only then consider the task complete
+
+**Common fixes needed**:
+- Unused variables: prefix with `_` (e.g., `_unusedVar`)
+- Missing dependencies in useEffect: add to dependency array or use ESLint disable comment
+- TypeScript `any` types: replace with proper types when possible
+- Import/export issues: ensure all imports are used
+
+**ESLint Configuration**: The project uses `@typescript-eslint/parser` with React hooks and TypeScript rules enabled.
 
 ## Backend Route Organization
 
