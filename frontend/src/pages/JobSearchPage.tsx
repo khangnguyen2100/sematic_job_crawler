@@ -288,7 +288,7 @@ const JobSearchPage: React.FC = () => {
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
             <p className="mt-2 text-gray-600">Searching for jobs...</p>
           </div>
-        ) : searchResults?.jobs.length === 0 ? (
+        ) : searchResults?.jobs?.length === 0 ? (
           <div className="text-center py-12">
             <Briefcase className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No jobs found</h3>
@@ -297,7 +297,7 @@ const JobSearchPage: React.FC = () => {
         ) : (
           <div>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {searchResults?.jobs.map((job, index) => (
+              {searchResults?.jobs?.map((job, index) => (
                 <JobCard key={job.id || index} job={job} />
               ))}
             </div>
