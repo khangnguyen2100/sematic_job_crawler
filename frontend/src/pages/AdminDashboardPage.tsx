@@ -5,17 +5,17 @@ import { adminApi } from '@/services/api';
 import { Job, JobSource } from '@/types';
 import { AdminDashboardStats, PaginatedJobsResponse } from '@/types/admin';
 import {
-  BarChart3,
-  Briefcase,
-  ChevronLeft, ChevronRight,
-  Download,
-  ExternalLink,
-  Filter,
-  Plus,
-  RefreshCw,
-  Trash2,
-  TrendingUp,
-  Users
+    BarChart3,
+    Briefcase,
+    ChevronLeft, ChevronRight,
+    Download,
+    ExternalLink,
+    Filter,
+    Plus,
+    RefreshCw,
+    Trash2,
+    TrendingUp,
+    Users
 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -120,20 +120,6 @@ const AdminDashboardPage: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to load dashboard stats:', error);
       setError('Failed to load dashboard statistics. Using sample data.');
-      
-      // Fallback to sample data if API fails
-      const mockStats: AdminDashboardStats = {
-        total_jobs: 110,
-        jobs_by_source: {
-          'LinkedIn': 28,
-          'TopCV': 28,
-          'ITViec': 27,
-          'VietnamWorks': 27
-        },
-        recent_jobs: 15,
-        pending_sync_jobs: 0
-      };
-      setStats(mockStats);
     } finally {
       setLoading(false);
     }
@@ -148,44 +134,7 @@ const AdminDashboardPage: React.FC = () => {
     } catch (error: any) {
       console.error('Failed to load jobs:', error);
       setError('Failed to load jobs. Please try again.');
-      
-      // Fallback to sample data if API fails
-      const mockJobs: PaginatedJobsResponse = {
-        jobs: [
-          {
-            id: '1',
-            title: 'Senior Python Developer',
-            description: 'We are seeking an experienced Senior Python Developer...',
-            company_name: 'Tech Innovate Vietnam',
-            posted_date: '2025-01-20T00:00:00',
-            source: JobSource.TOPCV,
-            original_url: 'https://www.topcv.vn/job/1001',
-            location: 'Ho Chi Minh City',
-            salary: '25-35 million VND',
-            job_type: 'Full-time',
-            experience_level: 'Senior'
-          },
-          {
-            id: '2',
-            title: 'Frontend React Developer',
-            description: 'Join our frontend team to build modern web applications...',
-            company_name: 'Digital Solutions Co',
-            posted_date: '2025-01-19T00:00:00',
-            source: JobSource.ITVIEC,
-            original_url: 'https://www.itviec.com/job/2002',
-            location: 'Ha Noi',
-            salary: '18-28 million VND',
-            job_type: 'Full-time',
-            experience_level: 'Mid-level'
-          }
-        ],
-        total: 110,
-        page: page,
-        per_page: 20,
-        total_pages: 6,
-        current_page: page
-      };
-      setJobs(mockJobs);
+  
     } finally {
       setJobsLoading(false);
     }
