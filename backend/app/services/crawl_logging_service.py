@@ -164,11 +164,22 @@ class CrawlLoggingService:
         
         success_rate_today = (successful_crawls_today / total_crawls_today * 100) if total_crawls_today > 0 else 0
         
-        # Recent errors
+        # Recent errors (unique by site_name and error_message)
         recent_errors = self.db.query(CrawlLogDB).filter(
             CrawlLogDB.error_message.isnot(None),
             func.date(CrawlLogDB.started_at) == today
-        ).order_by(CrawlLogDB.started_at.desc()).limit(5).all()
+        ).order_by(CrawlLogDB.started_at.desc()).limit(10).all()
+        
+        # Remove duplicates by site_name + error_message combination
+        seen_errors = set()
+        unique_errors = []
+        for error in recent_errors:
+            error_key = (error.site_name, error.error_message)
+            if error_key not in seen_errors:
+                seen_errors.add(error_key)
+                unique_errors.append(error)
+                if len(unique_errors) >= 5:  # Limit to 5 unique errors
+                    break
         
         # Active crawlers (recent activity)
         active_crawlers = self.db.query(
@@ -194,7 +205,7 @@ class CrawlLoggingService:
                     'error_message': error.error_message,
                     'started_at': error.started_at.isoformat() if error.started_at else None
                 }
-                for error in recent_errors
+                for error in unique_errors
             ]
         }
 
@@ -222,6 +233,51 @@ class CrawlLogger:
         return self
     
     def __exit__(self, exc_type, exc_val, exc_tb):
+        end_time = time.time()
+        response_time_ms = int((end_time - self.start_time) * 1000)
+        
+        if exc_type:
+            # Handle exception
+            self.logging_service.complete_crawl_session(
+                log_id=str(self.log_entry.id),
+                response_status=500,
+                response_time_ms=response_time_ms,
+                error_message=str(exc_val),
+                error_details={"exception_type": exc_type.__name__}
+            )
+        # If no exception, the crawler should call complete() manually
+    
+    def complete(self, **kwargs):
+        """Complete the crawl session with custom parameters"""
+        self.logging_service.complete_crawl_session(
+            log_id=str(self.log_entry.id),
+            **kwargs
+        )
+
+
+class AsyncCrawlLogger:
+    """Async context manager for easier crawler logging integration"""
+    
+    def __init__(self, logging_service: CrawlLoggingService, site_name: str, site_url: str, request_url: str, crawler_type: str):
+        self.logging_service = logging_service
+        self.site_name = site_name
+        self.site_url = site_url
+        self.request_url = request_url
+        self.crawler_type = crawler_type
+        self.log_entry = None
+        self.start_time = None
+        
+    async def __aenter__(self):
+        self.start_time = time.time()
+        self.log_entry = self.logging_service.start_crawl_session(
+            self.site_name, 
+            self.site_url, 
+            self.request_url, 
+            self.crawler_type
+        )
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         end_time = time.time()
         response_time_ms = int((end_time - self.start_time) * 1000)
         

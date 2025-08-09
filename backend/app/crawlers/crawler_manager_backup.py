@@ -201,11 +201,38 @@ class CrawlerManager:
                 total_crawled += crawled_count
                 total_added += added_count
                 total_already_exist += duplicates_count
+                    
+                    # Update totals
+                    total_crawled += crawled_count
+                    total_added += added_count
+                    total_already_exist += duplicates_count
+                    
+                    print(f"Completed {crawler.source_name}: {added_count} added, {duplicates_count} already exist")
+                    
+                except Exception as e:
+                    error_msg = f"Error crawling {crawler.source_name}: {e}"
+                    print(error_msg)
+                    source_errors.append(error_msg)
+                    all_errors.append(error_msg)
+                    
+                    # Create failed source result
+                    source_results[crawler.source_name] = CrawlSourceResult(
+                        source=crawler.source_name,
+                        total_crawled=0,
+                        jobs_added=0,
+                        jobs_already_exist=0,
+                        errors=source_errors,
+                        success_rate=0.0,
+                        duration_seconds=0.0
+                    )
         
-        # Calculate overall statistics
         end_time = datetime.utcnow()
         duration = (end_time - start_time).total_seconds()
+        
+        # Calculate overall success rate
         overall_success_rate = (total_added / total_crawled * 100) if total_crawled > 0 else 0
+        
+        print(f"Crawling completed: {total_added} total jobs added, {total_already_exist} already existed")
         
         return CrawlResult(
             total_crawled=total_crawled,
@@ -221,65 +248,54 @@ class CrawlerManager:
         )
     
     async def crawl_source(self, source_name: str, max_jobs: int = 100) -> dict:
-        """Crawl jobs from a specific source"""
-        for crawler in self.crawlers:
-            if crawler.source_name.lower() == source_name.lower():
+        """Crawl jobs from a specific source with detailed statistics"""
+        crawler = None
+        for c in self.crawlers:
+            if c.source_name.lower() == source_name.lower():
+                crawler = c
+                break
+
+        if not crawler:
+            return {
+                'error': f"Crawler for {source_name} not found",
+                'available_sources': [c.source_name for c in self.crawlers]
+            }
+
+        try:
+            if not await crawler.is_available():
+                return {'error': f"{source_name} is not available"}
+
+            jobs = await crawler.crawl_jobs(max_jobs)
+            added_count = 0
+            already_exist_count = 0
+
+            for job in jobs:
                 try:
-                    if not await crawler.is_available():
-                        return {
-                            'source': source_name,
-                            'success': False,
-                            'error': f'{source_name} is not available',
-                            'jobs_added': 0,
-                            'jobs_already_exist': 0
-                        }
-                    
-                    jobs = await crawler.crawl_jobs(max_jobs)
-                    added_count = 0
-                    duplicates_count = 0
-                    
-                    for job in jobs:
-                        try:
-                            # Check for duplicates
-                            is_duplicate = await self.marqo_service.check_duplicate_job(job)
-                            
-                            if is_duplicate:
-                                duplicates_count += 1
-                                continue
-                            
-                            # Add job to Marqo
-                            marqo_id = await self.marqo_service.add_job(job)
-                            added_count += 1
-                            
-                        except Exception as e:
-                            print(f"Error processing job: {e}")
-                            continue
-                    
-                    return {
-                        'source': source_name,
-                        'success': True,
-                        'jobs_crawled': len(jobs),
-                        'jobs_added': added_count,
-                        'jobs_already_exist': duplicates_count
-                    }
-                    
+                    # Check for duplicates using Marqo
+                    is_duplicate = await self.marqo_service.check_duplicate_job(job)
+
+                    if is_duplicate:
+                        already_exist_count += 1
+                        continue
+
+                    # Add job to Marqo
+                    marqo_id = await self.marqo_service.add_job(job)
+                    added_count += 1
+
                 except Exception as e:
-                    return {
-                        'source': source_name,
-                        'success': False,
-                        'error': str(e),
-                        'jobs_added': 0,
-                        'jobs_already_exist': 0
-                    }
-        
-        return {
-            'source': source_name,
-            'success': False,
-            'error': f'Source {source_name} not found',
-            'jobs_added': 0,
-            'jobs_already_exist': 0
-        }
+                    print(f"Error processing job: {e}")
+
+            return {
+                'source': source_name,
+                'total_crawled': len(jobs),
+                'jobs_added': added_count,
+                'jobs_already_exist': already_exist_count,
+                'success_rate': (added_count / len(jobs) * 100) if len(jobs) > 0 else 0
+            }
+
+        except Exception as e:
+            return {'error': f"Error crawling {source_name}: {e}"}
     
     def get_available_sources(self) -> List[str]:
-        """Get list of available source names"""
+        """Get list of available crawler sources"""
         return [crawler.source_name for crawler in self.crawlers]

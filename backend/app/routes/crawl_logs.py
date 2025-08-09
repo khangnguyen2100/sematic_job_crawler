@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime, date, timedelta
 from sqlalchemy.orm import Session
 
-from app.models.database import get_db
+from app.models.database import get_db, CrawlLogDB, CrawlStatisticsDB
 from app.models.schemas import CrawlLogListResponse, CrawlDashboardSummary, CrawlStatisticsResponse
 from app.services.crawl_logging_service import CrawlLoggingService
 from app.routes.admin import get_current_admin
@@ -47,22 +47,41 @@ async def get_crawl_logs(
             if log.completed_at and log.started_at:
                 duration_ms = int((log.completed_at - log.started_at).total_seconds() * 1000)
             
+            # Calculate status based on response_status
+            if log.response_status and 200 <= log.response_status < 300:
+                status = 'success'
+            elif log.error_message:
+                status = 'failed'
+            else:
+                status = 'pending'
+            
+            # Calculate jobs_failed
+            jobs_failed = log.jobs_found - log.jobs_stored if log.jobs_found and log.jobs_stored else 0
+            jobs_failed = max(0, jobs_failed)  # Ensure non-negative
+            
             log_data.append({
                 'id': str(log.id),
-                'site_name': log.site_name,
+                'site': log.site_name,  # Map to frontend expected field
+                'site_name': log.site_name,  # Keep for backward compatibility
                 'site_url': log.site_url,
                 'request_url': log.request_url,
-                'crawler_type': log.crawler_type,
-                'response_status': log.response_status,
+                'crawl_type': log.crawler_type,  # Map to frontend expected field
+                'crawler_type': log.crawler_type,  # Keep for backward compatibility
+                'status': status,  # Map to frontend expected field
+                'response_status': log.response_status,  # Keep for backward compatibility
                 'response_time_ms': log.response_time_ms,
                 'duration_ms': duration_ms,
                 'jobs_found': log.jobs_found,
                 'jobs_processed': log.jobs_processed,
                 'jobs_stored': log.jobs_stored,
+                'jobs_added': log.jobs_stored,  # Map to frontend expected field
                 'jobs_duplicated': log.jobs_duplicated,
+                'jobs_failed': jobs_failed,  # Calculate jobs failed for frontend
                 'error_message': log.error_message,
-                'started_at': log.started_at.isoformat() if log.started_at else None,
-                'completed_at': log.completed_at.isoformat() if log.completed_at else None
+                'start_time': log.started_at.isoformat() if log.started_at else None,  # Map to frontend expected field
+                'started_at': log.started_at.isoformat() if log.started_at else None,  # Keep for backward compatibility
+                'end_time': log.completed_at.isoformat() if log.completed_at else None,  # Map to frontend expected field
+                'completed_at': log.completed_at.isoformat() if log.completed_at else None  # Keep for backward compatibility
             })
         
         return {
@@ -76,50 +95,6 @@ async def get_crawl_logs(
         raise HTTPException(status_code=500, detail=f"Failed to get crawl logs: {str(e)}")
 
 
-@router.get("/{log_id}")
-async def get_crawl_log_details(
-    log_id: str,
-    current_admin=Depends(get_current_admin),
-    db: Session = Depends(get_db)
-):
-    """Get specific log details"""
-    try:
-        log = db.query(db.CrawlLogDB).filter(db.CrawlLogDB.id == log_id).first()
-        if not log:
-            raise HTTPException(status_code=404, detail="Log not found")
-        
-        duration_ms = None
-        if log.completed_at and log.started_at:
-            duration_ms = int((log.completed_at - log.started_at).total_seconds() * 1000)
-        
-        return {
-            'id': str(log.id),
-            'site_name': log.site_name,
-            'site_url': log.site_url,
-            'request_url': log.request_url,
-            'crawler_type': log.crawler_type,
-            'request_method': log.request_method,
-            'request_headers': log.request_headers,
-            'response_status': log.response_status,
-            'response_time_ms': log.response_time_ms,
-            'response_size_bytes': log.response_size_bytes,
-            'duration_ms': duration_ms,
-            'jobs_found': log.jobs_found,
-            'jobs_processed': log.jobs_processed,
-            'jobs_stored': log.jobs_stored,
-            'jobs_duplicated': log.jobs_duplicated,
-            'error_message': log.error_message,
-            'error_details': log.error_details,
-            'started_at': log.started_at.isoformat() if log.started_at else None,
-            'completed_at': log.completed_at.isoformat() if log.completed_at else None
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get log details: {str(e)}")
-
-
 @router.get("/dashboard/summary")
 async def get_dashboard_summary(
     current_admin=Depends(get_current_admin),
@@ -130,6 +105,31 @@ async def get_dashboard_summary(
         summary = logging_service.get_dashboard_summary()
         return summary
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get summary: {str(e)}")
+
+
+@router.get("/sites")
+async def get_available_sites(
+    current_admin=Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get list of available crawler sites"""
+    try:
+        # Get unique site names from crawl logs
+        sites = db.query(CrawlLogDB.site_name).distinct().all()
+        site_names = [site[0] for site in sites if site[0]]
+        
+        # Sort alphabetically
+        site_names.sort()
+        
+        return {
+            'sites': site_names,
+            'total': len(site_names)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get sites: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard summary: {str(e)}")
 
@@ -142,16 +142,16 @@ async def cleanup_old_logs(
 ):
     """Clean up old logs based on retention policy"""
     try:
-        cutoff_date = datetime.now() - datetime.timedelta(days=days_to_keep)
+        cutoff_date = datetime.now() - timedelta(days=days_to_keep)
         
         # Delete old crawl logs
-        deleted_logs = db.query(db.CrawlLogDB).filter(
-            db.CrawlLogDB.started_at < cutoff_date
+        deleted_logs = db.query(CrawlLogDB).filter(
+            CrawlLogDB.started_at < cutoff_date
         ).delete()
         
         # Delete old statistics
-        deleted_stats = db.query(db.CrawlStatisticsDB).filter(
-            db.CrawlStatisticsDB.date < cutoff_date
+        deleted_stats = db.query(CrawlStatisticsDB).filter(
+            CrawlStatisticsDB.date < cutoff_date
         ).delete()
         
         db.commit()
@@ -218,3 +218,66 @@ async def get_site_statistics(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get site statistics: {str(e)}")
+
+
+@router.get("/{log_id}")
+async def get_crawl_log_details(
+    log_id: str,
+    current_admin=Depends(get_current_admin),
+    db: Session = Depends(get_db)
+):
+    """Get specific log details"""
+    try:
+        log = db.query(CrawlLogDB).filter(CrawlLogDB.id == log_id).first()
+        if not log:
+            raise HTTPException(status_code=404, detail="Log not found")
+        
+        duration_ms = None
+        if log.completed_at and log.started_at:
+            duration_ms = int((log.completed_at - log.started_at).total_seconds() * 1000)
+        
+        # Calculate status based on response_status
+        if log.response_status and 200 <= log.response_status < 300:
+            status = 'success'
+        elif log.error_message:
+            status = 'failed'
+        else:
+            status = 'pending'
+        
+        # Calculate jobs_failed
+        jobs_failed = log.jobs_found - log.jobs_stored if log.jobs_found and log.jobs_stored else 0
+        jobs_failed = max(0, jobs_failed)  # Ensure non-negative
+        
+        return {
+            'id': str(log.id),
+            'site': log.site_name,  # Map to frontend expected field
+            'site_name': log.site_name,  # Keep for backward compatibility
+            'site_url': log.site_url,
+            'request_url': log.request_url,
+            'crawl_type': log.crawler_type,  # Map to frontend expected field
+            'crawler_type': log.crawler_type,  # Keep for backward compatibility
+            'request_method': log.request_method,
+            'request_headers': log.request_headers,
+            'status': status,  # Map to frontend expected field
+            'response_status': log.response_status,  # Keep for backward compatibility
+            'response_time_ms': log.response_time_ms,
+            'response_size_bytes': log.response_size_bytes,
+            'duration_ms': duration_ms,
+            'jobs_found': log.jobs_found,
+            'jobs_processed': log.jobs_processed,
+            'jobs_stored': log.jobs_stored,
+            'jobs_added': log.jobs_stored,  # Map to frontend expected field
+            'jobs_duplicated': log.jobs_duplicated,
+            'jobs_failed': jobs_failed,  # Calculate jobs failed for frontend
+            'error_message': log.error_message,
+            'error_details': log.error_details,
+            'start_time': log.started_at.isoformat() if log.started_at else None,  # Map to frontend expected field
+            'started_at': log.started_at.isoformat() if log.started_at else None,  # Keep for backward compatibility
+            'end_time': log.completed_at.isoformat() if log.completed_at else None,  # Map to frontend expected field
+            'completed_at': log.completed_at.isoformat() if log.completed_at else None  # Keep for backward compatibility
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get log details: {str(e)}")

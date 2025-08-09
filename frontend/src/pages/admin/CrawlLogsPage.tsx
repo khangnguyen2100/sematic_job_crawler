@@ -52,6 +52,7 @@ const CrawlLogsPage: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [availableSites, setAvailableSites] = useState<string[]>([]);
   
   const [filters, setFilters] = useState<CrawlLogFilters>({
     site: '',
@@ -103,6 +104,16 @@ const CrawlLogsPage: React.FC = () => {
     }
   };
 
+  // Fetch available sites
+  const fetchSites = async () => {
+    try {
+      const data = await adminApi.getCrawlSites();
+      setAvailableSites(data.sites || []);
+    } catch (err) {
+      console.error('Failed to fetch sites:', err);
+    }
+  };
+
   // Handle cleanup
   const cleanupLogs = async (daysToKeep: number = 30) => {
     try {
@@ -141,6 +152,7 @@ const CrawlLogsPage: React.FC = () => {
 
   useEffect(() => {
     fetchSummary();
+    fetchSites();
     
     // Refresh summary every 30 seconds
     const interval = setInterval(fetchSummary, 30000);
@@ -276,11 +288,16 @@ const CrawlLogsPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <Input
-              placeholder="Site"
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={filters.site}
               onChange={(e) => setFilters(prev => ({ ...prev, site: e.target.value }))}
-            />
+            >
+              <option value="">All Sites</option>
+              {availableSites.map(site => (
+                <option key={site} value={site}>{site}</option>
+              ))}
+            </select>
             
             <Input
               placeholder="Type"

@@ -299,6 +299,11 @@ export const adminApi = {
     return response.data;
   },
 
+  getCrawlSites: async (): Promise<{sites: string[], total: number}> => {
+    const response = await api.get('/admin/crawl-logs/sites');
+    return response.data;
+  },
+
   // Data Sources
   getDataSources: async (): Promise<any> => {
     const response = await api.get('/admin/data-sources/');
