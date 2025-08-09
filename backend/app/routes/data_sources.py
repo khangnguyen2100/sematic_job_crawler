@@ -5,7 +5,7 @@ This module provides CRUD operations for managing crawler configurations,
 including site domains, parameters, and other crawler-specific settings.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -13,9 +13,16 @@ from sqlalchemy.orm import Session
 from app.models.database import get_db, CrawlerConfigDB
 from app.services.auth_service import get_current_admin
 from app.models.schemas import JobSource
+from app.services.crawl_progress_service import crawl_progress_service, CrawlJobProgress
+from app.services.marqo_service import MarqoService
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/admin/data-sources", tags=["admin", "data-sources"])
+
+def get_marqo_service():
+    """Get MarqoService dependency"""
+    from app.main import marqo_service
+    return marqo_service
 
 # Pydantic models for request/response
 class CrawlerConfigBase(BaseModel):
@@ -40,6 +47,15 @@ class CrawlerConfigResponse(CrawlerConfigBase):
 
     class Config:
         from_attributes = True
+
+# Additional models for sync jobs
+class SyncJobRequest(BaseModel):
+    max_jobs: Optional[int] = 100
+
+class SyncJobResponse(BaseModel):
+    job_id: str
+    message: str
+    site_name: str
 
 @router.get("/", response_model=List[CrawlerConfigResponse])
 async def get_all_data_sources(
@@ -315,3 +331,78 @@ async def bulk_create_data_sources(
         )
     
     return created_configs
+
+@router.post("/{site_name}/sync", response_model=SyncJobResponse)
+async def sync_site_jobs(
+    site_name: str,
+    sync_request: SyncJobRequest,
+    background_tasks: BackgroundTasks,
+    current_admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+    marqo_service: MarqoService = Depends(get_marqo_service)
+):
+    """Start a background sync job for a specific data source"""
+    
+    # Get the data source configuration
+    config = db.query(CrawlerConfigDB).filter(
+        CrawlerConfigDB.site_name == site_name
+    ).first()
+    
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Configuration for site '{site_name}' not found"
+        )
+    
+    if not config.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Data source '{site_name}' is not active"
+        )
+    
+    # Create a new crawl job
+    job_id = crawl_progress_service.create_crawl_job(site_name, config.config)
+    
+    # Add max_jobs to config if specified
+    crawl_config = config.config.copy()
+    if sync_request.max_jobs:
+        crawl_config["max_jobs"] = sync_request.max_jobs
+    
+    # Start the background crawl task
+    background_tasks.add_task(
+        crawl_progress_service.run_site_crawl,
+        job_id=job_id,
+        site_name=site_name,
+        config=crawl_config,
+        marqo_service=marqo_service,
+        db=db
+    )
+    
+    return SyncJobResponse(
+        job_id=job_id,
+        message=f"Sync job started for {site_name}",
+        site_name=site_name
+    )
+
+@router.get("/sync/jobs", response_model=List[CrawlJobProgress])
+async def get_all_sync_jobs(
+    current_admin=Depends(get_current_admin)
+):
+    """Get all active sync jobs"""
+    return crawl_progress_service.get_all_active_jobs()
+
+@router.get("/sync/jobs/{job_id}", response_model=CrawlJobProgress)
+async def get_sync_job_progress(
+    job_id: str,
+    current_admin=Depends(get_current_admin)
+):
+    """Get progress for a specific sync job"""
+    progress = crawl_progress_service.get_job_progress(job_id)
+    
+    if not progress:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Sync job '{job_id}' not found"
+        )
+    
+    return progress

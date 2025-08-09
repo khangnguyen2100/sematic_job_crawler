@@ -2,11 +2,9 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 import os
 from datetime import datetime
-from sqlalchemy.orm import Session
 
 from app.services.marqo_service import MarqoService
 from app.crawlers.crawler_manager import CrawlerManager
-from app.models.database import get_db
 
 
 class JobScheduler:
@@ -59,15 +57,10 @@ class JobScheduler:
             print("Starting scheduled crawl...")
             max_jobs_per_source = int(os.getenv("MAX_JOBS_PER_SOURCE", "100"))
             
-            # Create database session for this crawl
-            db = next(get_db())
-            try:
-                # Create crawler manager with database session
-                crawler_manager = CrawlerManager(self.marqo_service, db)
-                results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
-                print(f"Scheduled crawl completed: {results.total_added} jobs added")
-            finally:
-                db.close()
+            # Create crawler manager without database session
+            crawler_manager = CrawlerManager(self.marqo_service)
+            results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
+            print(f"Scheduled crawl completed: {results.total_added} jobs added")
                 
         except Exception as e:
             print(f"Error in scheduled crawl: {e}")
@@ -78,15 +71,10 @@ class JobScheduler:
             print("Starting sample crawl...")
             max_jobs_per_source = 5  # Smaller batch for testing
             
-            # Create database session for this crawl
-            db = next(get_db())
-            try:
-                # Create crawler manager with database session
-                crawler_manager = CrawlerManager(self.marqo_service, db)
-                results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
-                print(f"Sample crawl completed: {results.total_added} jobs added")
-            finally:
-                db.close()
+            # Create crawler manager without database session
+            crawler_manager = CrawlerManager(self.marqo_service)
+            results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
+            print(f"Sample crawl completed: {results.total_added} jobs added")
                 
         except Exception as e:
             print(f"Error in sample crawl: {e}")
@@ -97,15 +85,10 @@ class JobScheduler:
             print("Manual crawl triggered")
             max_jobs_per_source = int(os.getenv("MAX_JOBS_PER_SOURCE", "50"))
             
-            # Create database session for this crawl
-            db = next(get_db())
-            try:
-                # Create crawler manager with database session
-                crawler_manager = CrawlerManager(self.marqo_service, db)
-                results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
-                return results
-            finally:
-                db.close()
+            # Create crawler manager without database session
+            crawler_manager = CrawlerManager(self.marqo_service)
+            results = await crawler_manager.crawl_all_sources(max_jobs_per_source)
+            return results
             
         except Exception as e:
             print(f"Error in manual crawl: {e}")

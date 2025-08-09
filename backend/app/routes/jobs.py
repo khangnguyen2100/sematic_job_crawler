@@ -4,10 +4,9 @@ from typing import List, Optional
 from app.models.schemas import Job, JobSource, SearchRequest
 from app.services.marqo_service import MarqoService
 from app.services.analytics_service import AnalyticsService  
-from app.models.database import get_db, JobMetadataDB
+from app.models.database import get_db
 from app.utils.user_tracking import get_user_id
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 router = APIRouter()
 
@@ -29,26 +28,6 @@ async def get_jobs_stats(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
-
-@router.get("/jobs/db-stats")
-async def get_database_stats(
-    db: Session = Depends(get_db)
-):
-    """Get statistics about jobs stored in PostgreSQL database"""
-    try:
-        total_jobs = db.query(JobMetadataDB).count()
-        jobs_by_source = db.query(JobMetadataDB.source, func.count(JobMetadataDB.id).label('count')).group_by(JobMetadataDB.source).all()
-        
-        source_stats = {source: count for source, count in jobs_by_source}
-        
-        return {
-            "total_jobs_in_database": total_jobs,
-            "jobs_by_source": source_stats,
-            "note": "This shows jobs stored in PostgreSQL. Vector search data is in Marqo."
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get database stats: {str(e)}")
 
 @router.post("/jobs/recreate-index")
 async def recreate_index(

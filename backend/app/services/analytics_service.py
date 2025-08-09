@@ -3,7 +3,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import json
 
-from app.models.database import get_db, UserInteractionDB, JobMetadataDB
+from app.models.database import get_db, UserInteractionDB
 from app.models.schemas import UserInteraction
 
 class AnalyticsService:

@@ -1,4 +1,5 @@
 import { JsonEditor } from '@/components/JsonEditor';
+import { SyncJobModal } from '@/components/SyncJobModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -11,6 +12,7 @@ import {
   Database,
   Edit,
   Globe,
+  Play,
   Plus,
   RefreshCw,
   Settings,
@@ -134,6 +136,17 @@ const DataSourcesPage: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isJsonEditorOpen, setIsJsonEditorOpen] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<any>({});
+  const [syncJobModal, setSyncJobModal] = useState<{
+    isOpen: boolean;
+    jobId: string;
+    siteName: string;
+  }>({
+    isOpen: false,
+    jobId: '',
+    siteName: ''
+  });
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [showSyncDropdown, setShowSyncDropdown] = useState(false);
   const navigate = useNavigate();
 
   // Form state for create/edit
@@ -259,6 +272,35 @@ const DataSourcesPage: React.FC = () => {
     }
   };
 
+  const handleSyncJobs = async (siteName: string) => {
+    setSyncLoading(true);
+    setShowSyncDropdown(false);
+    
+    try {
+      const response = await adminApi.syncSiteJobs(siteName, 100); // Default to 100 jobs max
+      
+      // Open sync job modal with the job ID
+      setSyncJobModal({
+        isOpen: true,
+        jobId: response.job_id,
+        siteName: siteName
+      });
+    } catch (error) {
+      console.error('Failed to start sync job:', error);
+      alert('Failed to start sync job. Please try again.');
+    } finally {
+      setSyncLoading(false);
+    }
+  };
+
+  const closeSyncJobModal = () => {
+    setSyncJobModal({
+      isOpen: false,
+      jobId: '',
+      siteName: ''
+    });
+  };
+
   const resetForm = () => {
     setFormData({
       site_name: '',
@@ -302,6 +344,48 @@ const DataSourcesPage: React.FC = () => {
           <p className="text-gray-600 mt-1">Manage crawler configurations and data source settings</p>
         </div>
         <div className="flex gap-3">
+          <div className="relative">
+            <Button
+              onClick={() => setShowSyncDropdown(!showSyncDropdown)}
+              disabled={syncLoading || activeSources.length === 0}
+              className="flex items-center gap-2"
+            >
+              {syncLoading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4" />
+                  Sync Jobs
+                </>
+              )}
+            </Button>
+            
+            {showSyncDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border z-50">
+                <div className="py-1">
+                  {activeSources.length > 0 ? (
+                    activeSources.map((source) => (
+                      <button
+                        key={source.id}
+                        onClick={() => handleSyncJobs(source.site_name)}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                      >
+                        <Globe className="h-4 w-4" />
+                        Sync from {source.site_name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-4 py-2 text-sm text-gray-500">
+                      No active sources available
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <Button variant="outline" onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Add Source
@@ -535,6 +619,14 @@ const DataSourcesPage: React.FC = () => {
           />
         </DialogContent>
       </Dialog>
+
+      {/* Sync Job Modal */}
+      <SyncJobModal
+        isOpen={syncJobModal.isOpen}
+        onClose={closeSyncJobModal}
+        jobId={syncJobModal.jobId}
+        siteName={syncJobModal.siteName}
+      />
     </div>
   );
 };

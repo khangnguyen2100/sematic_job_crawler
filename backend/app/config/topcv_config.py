@@ -50,13 +50,17 @@ class TopCVConfig(BaseModel):
     start_page: int = Field(default=1, ge=1)
     
     # Request settings
-    request_delay: float = Field(default=2.0, ge=0.5, le=10.0)  # Delay between requests in seconds
-    timeout: int = Field(default=30, ge=10, le=60)  # Page timeout in seconds
+    request_delay: float = Field(default=3.0, ge=1.0, le=10.0)  # Longer delay between requests
+    timeout: int = Field(default=45, ge=15, le=90)  # Longer timeout for anti-bot measures
     
     # Browser settings
-    headless: bool = True
+    headless: bool = False  # Default to visible for challenge solving
     user_agent: str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    viewport: Dict[str, int] = {"width": 1920, "height": 1080}
+    viewport: Dict[str, int] = {"width": 1366, "height": 768}  # More common resolution
+    
+    # Human-in-the-loop settings
+    enable_human_challenge_solving: bool = True
+    challenge_timeout: int = Field(default=120, ge=30, le=300)  # Time to wait for human to solve challenge
     
     # Job extraction settings
     max_description_length: int = Field(default=5000, ge=100)

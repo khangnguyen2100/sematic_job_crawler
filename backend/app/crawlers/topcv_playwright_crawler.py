@@ -7,6 +7,9 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from urllib.parse import urljoin, urlparse
 import re
+import httpx
+import json
+import random
 
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 from bs4 import BeautifulSoup
@@ -25,6 +28,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
         self.config = config or DEFAULT_TOPCV_CONFIG
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
+        self.logger = logging.getLogger(__name__)
         
     async def __aenter__(self):
         """Async context manager entry"""
@@ -35,41 +39,284 @@ class TopCVPlaywrightCrawler(BaseCrawler):
         """Async context manager exit"""
         await self._close_browser()
     
-    async def _init_browser(self):
-        """Initialize Playwright browser and context"""
+    async def _init_browser(self) -> None:
+        """Initialize browser with enhanced stealth settings and anti-detection measures"""
         try:
-            self.playwright = await async_playwright().start()
+            self.logger.info("Launching browser with advanced anti-detection measures")
             
-            # Launch browser with configuration
-            self.browser = await self.playwright.chromium.launch(
-                headless=self.config.headless,
-                args=[
-                    '--no-sandbox',
-                    '--disable-blink-features=AutomationControlled',
-                    '--disable-dev-shm-usage'
-                ]
+            self.browser = await async_playwright().start()
+            
+            # Enhanced stealth arguments based on ZenRows recommendations
+            stealth_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--disable-features=VizDisplayCompositor',
+                '--no-first-run',
+                '--disable-default-apps',
+                '--disable-extensions-file-access-check',
+                '--disable-extensions',
+                '--disable-plugins-discovery',
+                '--disable-web-security',
+                '--allow-running-insecure-content',
+                '--disable-dev-shm-usage',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-accelerated-2d-canvas',
+                '--no-zygote',
+                '--disable-gpu',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-features=TranslateUI',
+                '--disable-ipc-flooding-protection',
+                '--window-size=1920,1080'
+            ]
+            
+            self.context = await self.browser.chromium.launch(
+                headless=False,
+                args=stealth_args
             )
             
-            # Create context with configuration
-            self.context = await self.browser.new_context(
-                user_agent=self.config.user_agent,
-                viewport=self.config.viewport,
-                java_script_enabled=True,
-                ignore_https_errors=True
+            # Create context with enhanced fingerprinting resistance
+            self.page_context = await self.context.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                extra_http_headers={
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Cache-Control': 'max-age=0'
+                }
             )
             
-            # Add stealth settings
-            await self.context.add_init_script("""
+            self.page = await self.page_context.new_page()
+            
+            # Apply advanced stealth patches
+            await self._apply_stealth_patches()
+            
+            self.logger.info("Browser initialized with advanced anti-detection measures")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize browser: {e}")
+            raise
+    
+    async def _apply_stealth_patches(self) -> None:
+        """Apply stealth patches to hide automation traces"""
+        try:
+            # Remove webdriver property (Method from ZenRows blog)
+            await self.page.add_init_script("""
+                // Remove webdriver property
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined,
                 });
+                
+                // Remove automation indicators
+                delete window.navigator.__proto__.webdriver;
+                
+                // Mock chrome property
+                window.chrome = {
+                    runtime: {},
+                };
+                
+                // Mock plugins
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5],
+                });
+                
+                // Mock languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en'],
+                });
+                
+                // Hide automation properties
+                const originalQuery = window.document.querySelector;
+                window.document.querySelector = function(selector) {
+                    if (selector === 'img[src*="data:image/png;base64"]') {
+                        return null;
+                    }
+                    return originalQuery.call(document, selector);
+                };
+                
+                // Randomize canvas fingerprint slightly
+                const getContext = HTMLCanvasElement.prototype.getContext;
+                HTMLCanvasElement.prototype.getContext = function(type) {
+                    if (type === '2d') {
+                        const ctx = getContext.call(this, type);
+                        const originalFillText = ctx.fillText;
+                        ctx.fillText = function(text, x, y) {
+                            return originalFillText.call(this, text, x + Math.random() * 0.1, y + Math.random() * 0.1);
+                        };
+                        return ctx;
+                    }
+                    return getContext.call(this, type);
+                };
             """)
             
-            logger.info("Browser initialized successfully")
+            self.logger.info("Applied stealth patches to hide automation traces")
             
         except Exception as e:
-            logger.error(f"Failed to initialize browser: {e}")
-            raise
+            self.logger.warning(f"Failed to apply stealth patches: {e}")
+
+    async def _try_flaresolverr_bypass(self, url: str) -> Optional[str]:
+        """
+        Try to bypass Cloudflare using FlareSolverr as fallback
+        Based on Method #1 from ZenRows blog
+        """
+        try:
+            flaresolverr_url = "http://localhost:8191/v1"  # Default FlareSolverr endpoint
+            
+            payload = {
+                "cmd": "request.get",
+                "url": url,
+                "maxTimeout": 60000,
+                "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            
+            self.logger.info(f"🔧 Attempting FlareSolverr bypass for {url}")
+            
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(flaresolverr_url, json=payload)
+                
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get("status") == "ok":
+                        self.logger.info("✅ FlareSolverr bypass successful")
+                        return result["solution"]["response"]
+                    else:
+                        self.logger.warning(f"❌ FlareSolverr failed: {result.get('message', 'Unknown error')}")
+                        return None
+                else:
+                    self.logger.warning(f"❌ FlareSolverr request failed with status {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            self.logger.warning(f"❌ FlareSolverr bypass failed: {e}")
+            return None
+    
+    async def _try_cloudscraper_bypass(self, url: str) -> Optional[str]:
+        """
+        Try to bypass Cloudflare using cloudscraper technique
+        Based on Method #1 from ZenRows blog
+        """
+        try:
+            self.logger.info(f"🔧 Attempting cloudscraper-style bypass for {url}")
+            
+            # Enhanced headers that mimic a real browser more closely
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1',
+                'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'Cache-Control': 'max-age=0'
+            }
+            
+            async with httpx.AsyncClient(
+                headers=headers,
+                timeout=30.0,
+                follow_redirects=True,
+                verify=False  # Disable SSL verification
+            ) as client:
+                # First, visit the homepage to establish session
+                homepage_response = await client.get("https://www.topcv.vn")
+                
+                # Small delay to mimic human behavior
+                await asyncio.sleep(random.uniform(1, 3))
+                
+                # Now try the target URL
+                response = await client.get(url)
+                
+                if response.status_code == 200 and "Cloudflare" not in response.text:
+                    self.logger.info("✅ Cloudscraper-style bypass successful")
+                    return response.text
+                else:
+                    self.logger.warning(f"❌ Cloudscraper-style bypass failed: {response.status_code}")
+                    return None
+                    
+        except Exception as e:
+            self.logger.warning(f"❌ Cloudscraper-style bypass failed: {e}")
+            return None
+    
+    async def _solve_cloudflare_challenge(self, page: Page, max_wait_time: int = 120) -> bool:
+        """
+        Wait for human to solve Cloudflare challenge manually
+        Returns True if challenge is solved, False if timeout
+        """
+        self.logger.info("🔒 Cloudflare challenge detected!")
+        self.logger.info("📢 PLEASE SOLVE THE CHALLENGE MANUALLY IN THE BROWSER WINDOW")
+        self.logger.info("   - Look for CAPTCHA, checkbox, or verification button")
+        self.logger.info("   - Complete any required verification")
+        self.logger.info(f"   - Waiting up to {max_wait_time} seconds for you to solve it...")
+        
+        start_time = asyncio.get_event_loop().time()
+        
+        while (asyncio.get_event_loop().time() - start_time) < max_wait_time:
+            try:
+                # Check if we're still on a challenge page
+                current_title = await page.title()
+                current_url = page.url
+                
+                # Common Cloudflare challenge indicators
+                if all([
+                    "just a moment" not in current_title.lower(),
+                    "checking your browser" not in current_title.lower(),
+                    "verify you are human" not in current_title.lower(),
+                    "cloudflare" not in current_title.lower()
+                ]):
+                    # Additional check: look for actual content
+                    await asyncio.sleep(2)  # Let page settle
+                    
+                    # Check if we can find job-related content
+                    content_indicators = [
+                        '.job-item-search-result',
+                        '.job-item',
+                        'input[placeholder*="tìm kiếm"]',
+                        'h1, h2, h3'  # Any heading content
+                    ]
+                    
+                    for selector in content_indicators:
+                        elements = await page.query_selector_all(selector)
+                        if elements:
+                            logger.info("✅ Challenge appears to be solved! Found page content.")
+                            return True
+                    
+                    # If no job content but title changed, likely solved
+                    if current_url != "about:blank" and len(current_title) > 10:
+                        logger.info("✅ Challenge solved! Page title and URL changed.")
+                        return True
+                
+                # Still on challenge page, wait a bit more
+                await asyncio.sleep(3)
+                
+                # Show progress to user
+                elapsed = int(asyncio.get_event_loop().time() - start_time)
+                remaining = max_wait_time - elapsed
+                if elapsed % 10 == 0:  # Show message every 10 seconds
+                    logger.info(f"⏳ Still waiting for challenge solution... {remaining}s remaining")
+                
+            except Exception as e:
+                logger.warning(f"Error checking challenge status: {e}")
+                await asyncio.sleep(3)
+        
+        logger.error("❌ Timeout waiting for challenge solution")
+        return False
     
     async def _close_browser(self):
         """Close browser and cleanup"""
@@ -85,7 +332,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
             logger.error(f"Error closing browser: {e}")
     
     async def crawl_jobs(self, max_jobs: int = 100) -> List[JobCreate]:
-        """Main crawling method with pagination support"""
+        """Main crawling method with enhanced anti-bot measures and rate limiting"""
         if not self.browser:
             await self._init_browser()
         
@@ -93,6 +340,18 @@ class TopCVPlaywrightCrawler(BaseCrawler):
         urls = self.config.get_search_urls()
         
         logger.info(f"Starting crawl with {len(urls)} URLs, max {max_jobs} jobs")
+        logger.info(f"Using request delay: {self.config.request_delay}s")
+        
+        # Initialize session by visiting homepage first
+        try:
+            logger.info("Initializing session by visiting TopCV homepage...")
+            init_page = await self.context.new_page()
+            await init_page.goto("https://www.topcv.vn", wait_until='domcontentloaded', timeout=30000)
+            await asyncio.sleep(2)  # Let the page settle
+            await init_page.close()
+            logger.info("Session initialized successfully")
+        except Exception as e:
+            logger.warning(f"Could not initialize session: {e}")
         
         try:
             for url_index, url in enumerate(urls):
@@ -101,14 +360,24 @@ class TopCVPlaywrightCrawler(BaseCrawler):
                     
                 logger.info(f"Crawling URL {url_index + 1}/{len(urls)}: {url}")
                 
-                page_jobs = await self._crawl_page(url, max_jobs - len(jobs))
-                jobs.extend(page_jobs)
-                
-                logger.info(f"Found {len(page_jobs)} jobs on this page. Total: {len(jobs)}")
-                
-                # Delay between pages
-                if url_index < len(urls) - 1:
-                    await asyncio.sleep(self.config.request_delay)
+                try:
+                    page_jobs = await self._crawl_page(url, max_jobs - len(jobs), url_index)
+                    jobs.extend(page_jobs)
+                    
+                    logger.info(f"Found {len(page_jobs)} jobs on this page. Total: {len(jobs)}")
+                    
+                    # Enhanced delay between pages with randomization
+                    if url_index < len(urls) - 1:
+                        delay = self.config.request_delay + (2.0 * (asyncio.get_event_loop().time() % 1))
+                        logger.info(f"Waiting {delay:.1f}s before next page...")
+                        await asyncio.sleep(delay)
+                        
+                except Exception as e:
+                    logger.error(f"Error crawling URL {url}: {e}")
+                    if "403" in str(e) or "forbidden" in str(e).lower():
+                        logger.warning("Received 403 error, increasing delay and continuing...")
+                        await asyncio.sleep(10)  # Wait longer after 403
+                    continue
             
             logger.info(f"Crawling completed. Total jobs found: {len(jobs)}")
             return jobs
@@ -117,24 +386,145 @@ class TopCVPlaywrightCrawler(BaseCrawler):
             logger.error(f"Error during crawling: {e}")
             return jobs
         finally:
-            if self.config.headless:  # Only auto-close in headless mode
-                await self._close_browser()
+            # For human-in-the-loop mode, ask before closing browser
+            logger.info("🔍 Crawling completed. Browser window will remain open for inspection.")
+            logger.info("📢 You can manually inspect the results or close the browser when ready.")
+            # Don't auto-close in human-in-the-loop mode - let user close manually
+            # await self._close_browser()
     
-    async def _crawl_page(self, url: str, max_jobs: int) -> List[JobCreate]:
-        """Crawl a single search results page"""
+    async def _crawl_page(self, url: str, max_jobs: int, url_index: int = 0) -> List[JobCreate]:
+        """Crawl a single search results page with enhanced anti-bot measures"""
         page = await self.context.new_page()
         jobs = []
         
         try:
-            # Navigate to page
-            await page.goto(url, wait_until='domcontentloaded', timeout=self.config.timeout * 1000)
+            logger.info(f"Navigating to: {url}")
+            
+            # Add random mouse movements and delays before navigation
+            await asyncio.sleep(0.5 + (0.5 * asyncio.get_event_loop().time() % 1))
+            
+            # Set referrer for more natural browsing pattern
+            referrer = None
+            if url_index > 0:
+                referrer = "https://www.topcv.vn/"
+            
+            # Navigate to page with enhanced options
+            response = await page.goto(
+                url, 
+                wait_until='domcontentloaded', 
+                timeout=self.config.timeout * 1000,
+                referer=referrer
+            )
+            
+            # Check response status and handle Cloudflare challenges
+            if response and response.status == 403:
+                logger.error(f"403 Forbidden received for {url}")
+                
+                # Check if it's a Cloudflare challenge page
+                await asyncio.sleep(2)  # Let page load completely
+                page_content = await page.content()
+                page_title = await page.title()
+                
+                logger.info(f"Page title: '{page_title}'")
+                logger.info(f"Page URL: {page.url}")
+                
+                # More comprehensive challenge detection
+                challenge_indicators = [
+                    "just a moment",
+                    "checking your browser", 
+                    "verify you are human",
+                    "cloudflare",
+                    "challenge",
+                    "security check",
+                    "please wait"
+                ]
+                
+                is_challenge_page = any(indicator in page_title.lower() for indicator in challenge_indicators)
+                has_challenge_content = any(indicator in page_content.lower() for indicator in challenge_indicators)
+                
+                if is_challenge_page or has_challenge_content or len(page_title.strip()) < 5:
+                    logger.info("🔒 Detected potential Cloudflare challenge page")
+                    
+                    # Multi-method bypass approach based on ZenRows recommendations
+                    bypass_successful = False
+                    
+                    # Method 1: Try FlareSolverr bypass first (fastest if available)
+                    if not bypass_successful:
+                        flare_content = await self._try_flaresolverr_bypass(url)
+                        if flare_content:
+                            logger.info("✅ FlareSolverr bypass successful, parsing content")
+                            soup = BeautifulSoup(flare_content, 'html.parser')
+                            extracted_jobs = await self._extract_jobs(soup, url)
+                            if extracted_jobs:
+                                jobs.extend(extracted_jobs)
+                                bypass_successful = True
+                    
+                    # Method 2: Try cloudscraper-style bypass
+                    if not bypass_successful:
+                        scraper_content = await self._try_cloudscraper_bypass(url)
+                        if scraper_content:
+                            logger.info("✅ Cloudscraper bypass successful, parsing content")
+                            soup = BeautifulSoup(scraper_content, 'html.parser')
+                            extracted_jobs = await self._extract_jobs(soup, url)
+                            if extracted_jobs:
+                                jobs.extend(extracted_jobs)
+                                bypass_successful = True
+                    
+                    # Method 3: Fall back to human-in-the-loop challenge solving
+                    if not bypass_successful:
+                        challenge_solved = await self._solve_cloudflare_challenge(page, max_wait_time=120)
+                        
+                        if challenge_solved:
+                            logger.info("✅ Challenge solved! Continuing with crawling...")
+                        logger.info("✅ Challenge solved! Continuing with crawling...")
+                        # Continue with normal crawling flow below
+                    else:
+                        logger.error("❌ Could not solve Cloudflare challenge within timeout")
+                        return jobs
+                else:
+                    logger.error("403 error but not a Cloudflare challenge - possibly blocked")
+                    logger.info("💡 Try manually navigating to the URL in the browser to see what's happening")
+                    # Keep page open for manual inspection
+                    logger.info("🖥️  Browser page will stay open for manual inspection...")
+                    await asyncio.sleep(30)  # Keep page open for 30 seconds
+                    return jobs
+                
+            elif response and response.status != 200:
+                logger.error(f"HTTP {response.status} received for {url}")
+                return jobs
+            
+            # Human-like behavior: random mouse movement
+            await page.mouse.move(
+                x=100 + (200 * (asyncio.get_event_loop().time() % 1)),
+                y=100 + (200 * (asyncio.get_event_loop().time() % 1))
+            )
+            
+            # Wait for page to stabilize
+            await asyncio.sleep(1)
+            
+            # Scroll down slowly to trigger dynamic content loading
+            await page.evaluate("""
+                window.scrollTo({
+                    top: document.body.scrollHeight / 3,
+                    behavior: 'smooth'
+                });
+            """)
+            await asyncio.sleep(1.5)
             
             # Wait for job listings to load - use TopCV specific selector
             try:
-                await page.wait_for_selector('.job-item-search-result', timeout=10000)
+                await page.wait_for_selector('.job-item-search-result', timeout=15000)
                 logger.info("Job listings loaded successfully")
             except Exception as e:
                 logger.warning(f"Could not find .job-item-search-result: {e}")
+                # Check if we got blocked
+                page_content = await page.content()
+                if "captcha" in page_content.lower() or "blocked" in page_content.lower():
+                    logger.error("Page appears to be blocked or has CAPTCHA")
+                    # Save page content for debugging
+                    logger.debug(f"Page content preview: {page_content[:500]}")
+                    return jobs
+                
                 # Try alternative waiting strategy
                 await page.wait_for_load_state('networkidle', timeout=10000)
             
@@ -146,7 +536,8 @@ class TopCVPlaywrightCrawler(BaseCrawler):
                 selectors_to_try = [
                     '[data-job-id]',
                     '.job-item',
-                    '.job-list-item'
+                    '.job-list-item',
+                    '.job-list .job-item-search-result'
                 ]
                 for selector in selectors_to_try:
                     job_elements = await page.query_selector_all(selector)
@@ -156,11 +547,23 @@ class TopCVPlaywrightCrawler(BaseCrawler):
             
             logger.info(f"Found {len(job_elements)} job elements on page")
             
+            if not job_elements:
+                # Log page title and URL for debugging
+                page_title = await page.title()
+                logger.warning(f"No job elements found on page: {page_title} ({url})")
+                # Save a small portion of page content for debugging
+                page_content = await page.content()
+                logger.debug(f"Page content preview: {page_content[:1000]}")
+            
             for i, job_element in enumerate(job_elements):
                 if len(jobs) >= max_jobs:
                     break
                     
                 try:
+                    # Human-like delay between job extractions
+                    if i > 0:
+                        await asyncio.sleep(0.1 + (0.2 * (i % 3)))
+                    
                     job_data = await self._extract_job_from_element(page, job_element)
                     if job_data and self._validate_job_data(job_data):
                         # Get additional details if enabled
@@ -171,11 +574,21 @@ class TopCVPlaywrightCrawler(BaseCrawler):
                         logger.debug(f"Extracted job {i + 1}: {job_data.title}")
                     
                 except Exception as e:
-                    logger.warning(f"Error extracting job {i + 1}: {e}")
-                    continue
+                        logger.warning(f"Error extracting job {i + 1}: {e}")
+                        continue
+            
+            # Human-like behavior: scroll back up
+            await page.evaluate("window.scrollTo({ top: 0, behavior: 'smooth' });")
+            await asyncio.sleep(0.5)
             
         except Exception as e:
             logger.error(f"Error crawling page {url}: {e}")
+            # Check if it's a network/timeout error vs. blocking
+            if "403" in str(e) or "forbidden" in str(e).lower():
+                logger.error("Received 403 Forbidden - possible anti-bot detection")
+            elif "timeout" in str(e).lower():
+                logger.error("Page load timeout - possible slow response or blocking")
+            
         finally:
             await page.close()
         

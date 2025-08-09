@@ -6,8 +6,7 @@ from datetime import datetime
 
 from app.models.schemas import JobCreate, JobSource, UploadResponse, JobBulkUpload
 from app.services.marqo_service import MarqoService
-from app.services.job_deduplication_service import JobDeduplicationService
-from app.models.database import get_db, JobMetadataDB
+from app.models.database import get_db
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -135,30 +134,21 @@ async def upload_csv(
         
         # Check for duplicates and add jobs
         processed_jobs = 0
-        dedup_service = JobDeduplicationService(db)
         
         for job in jobs:
             try:
-                # Check for duplicates using deduplication service
-                is_new, result = await dedup_service.check_and_store_job(job)
+                # Check for duplicates using Marqo
+                is_duplicate = await marqo_service.check_duplicate_job(job)
                 
-                if is_new:
+                if not is_duplicate:
                     # Add job to Marqo
                     job_id = await marqo_service.add_job(job)
-                    
-                    # Update the stored job with Marqo ID
-                    job_entry = db.query(JobMetadataDB).filter(JobMetadataDB.id == result).first()
-                    if job_entry:
-                        job_entry.marqo_id = job_id
-                        db.commit()
-                    
                     processed_jobs += 1
                 else:
-                    errors.append(f"Duplicate job skipped: {result}")
+                    errors.append(f"Duplicate job skipped: {job.title} at {job.company_name}")
                     
             except Exception as e:
                 errors.append(f"Error adding job '{job.title}': {str(e)}")
-                db.rollback()  # Rollback database transaction on error
         
         return UploadResponse(
             message=f"Successfully processed {processed_jobs} jobs from CSV",
@@ -176,8 +166,7 @@ async def upload_csv(
 @router.post("/upload/json", response_model=UploadResponse)
 async def upload_jobs_json(
     jobs_payload: JobBulkUpload,
-    marqo_service: MarqoService = Depends(get_marqo_service),
-    db: Session = Depends(get_db)
+    marqo_service: MarqoService = Depends(get_marqo_service)
 ):
     """Upload jobs from JSON data"""
     
@@ -187,30 +176,21 @@ async def upload_jobs_json(
     try:
         processed_jobs = 0
         errors = []
-        dedup_service = JobDeduplicationService(db)
         
         for i, job in enumerate(jobs_payload.jobs):
             try:
-                # Check for duplicates and add jobs
-                is_new, result = await dedup_service.check_and_store_job(job)
+                # Check for duplicates using Marqo
+                is_duplicate = await marqo_service.check_duplicate_job(job)
                 
-                if is_new:
+                if not is_duplicate:
                     # Add job to Marqo
                     job_id = await marqo_service.add_job(job)
-                    
-                    # Update the stored job with Marqo ID
-                    job_entry = db.query(JobMetadataDB).filter(JobMetadataDB.id == result).first()
-                    if job_entry:
-                        job_entry.marqo_id = job_id
-                        db.commit()
-                    
                     processed_jobs += 1
                 else:
                     errors.append(f"Job {i + 1}: Duplicate skipped - {job.title} at {job.company_name}")
                     
             except Exception as e:
                 errors.append(f"Job {i + 1}: Error adding '{job.title}' - {str(e)}")
-                db.rollback()  # Rollback database transaction on error
         
         return UploadResponse(
             message=f"Successfully processed {processed_jobs} jobs from JSON",

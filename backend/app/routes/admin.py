@@ -10,7 +10,7 @@ from app.models.schemas import (
 from app.services.auth_service import AuthService, get_current_admin
 from app.services.marqo_service import MarqoService
 from app.services.analytics_service import AnalyticsService
-from app.models.database import get_db, JobMetadataDB
+from app.models.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
@@ -45,39 +45,30 @@ async def admin_login(login_request: AdminLoginRequest):
 @router.get("/dashboard/stats", response_model=AdminDashboardStats)
 async def get_dashboard_stats(
     current_admin: Dict[str, Any] = Depends(get_current_admin),
-    db: Session = Depends(get_db),
     marqo_service: MarqoService = Depends(get_marqo_service)
 ):
     """Get admin dashboard statistics"""
     try:
-        # Get total jobs from database
-        total_jobs = db.query(JobMetadataDB).count()
-        
-        # Get jobs by source
-        jobs_by_source = {}
-        source_counts = db.query(
-            JobMetadataDB.source,
-            func.count(JobMetadataDB.id)
-        ).group_by(JobMetadataDB.source).all()
-        
-        for source, count in source_counts:
-            jobs_by_source[source] = count
-        
-        # Get recent jobs (last 24 hours)
-        twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
-        recent_jobs = db.query(JobMetadataDB).filter(
-            JobMetadataDB.created_at >= twenty_four_hours_ago
-        ).count()
-        
         # Get Marqo index stats
         marqo_stats = await marqo_service.get_index_stats()
+        
+        # Extract relevant data from Marqo stats
+        total_jobs = marqo_stats.get('numberOfDocuments', 0)
+        
+        # Note: We can't get jobs by source from index stats, so we provide a placeholder
+        jobs_by_source = {
+            "TopCV": 0,
+            "ITViec": 0, 
+            "VietnamWorks": 0,
+            "LinkedIn": 0
+        }
         
         return AdminDashboardStats(
             total_jobs=total_jobs,
             jobs_by_source=jobs_by_source,
-            recent_jobs=recent_jobs,
-            pending_sync_jobs=0,  # Could be enhanced with actual sync queue
-            last_sync_time=None  # Could be enhanced with last sync tracking
+            recent_jobs=0,  # Could be enhanced with time-based filtering in Marqo
+            pending_sync_jobs=0,
+            last_sync_time=None
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get dashboard stats: {str(e)}")
@@ -88,52 +79,32 @@ async def get_admin_jobs(
     per_page: int = 20,
     source: str = None,
     current_admin: Dict[str, Any] = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    marqo_service: MarqoService = Depends(get_marqo_service)
 ):
     """Get paginated list of jobs for admin"""
     try:
         # Calculate offset
         offset = (page - 1) * per_page
         
-        # Build query
-        query = db.query(JobMetadataDB)
-        if source:
-            query = query.filter(JobMetadataDB.source == source)
+        # Create a search request to get jobs from Marqo
+        from app.models.schemas import SearchRequest, JobSource as JobSourceEnum
         
-        # Get total count
-        total = query.count()
+        search_request = SearchRequest(
+            query="*",  # Get all jobs
+            sources=[JobSourceEnum(source)] if source else None,
+            location="",
+            limit=per_page,
+            offset=offset
+        )
         
-        # Get paginated results
-        jobs_data = query.order_by(desc(JobMetadataDB.created_at)).offset(offset).limit(per_page).all()
+        # Get jobs from Marqo
+        search_result = await marqo_service.search_jobs(search_request)
+        jobs = search_result.get("jobs", [])
         
-        # Convert to Job objects
-        jobs = []
-        for job_data in jobs_data:
-            # Use database ID if marqo_id is None
-            job_id = job_data.marqo_id if job_data.marqo_id else str(job_data.id)
-            
-            # Handle None posted_date
-            posted_date = job_data.posted_date if job_data.posted_date else job_data.created_at
-            
-            job = Job(
-                id=job_id,
-                title=job_data.title,
-                description=job_data.description,
-                company_name=job_data.company_name,
-                posted_date=posted_date,
-                source=JobSource(job_data.source),
-                original_url=job_data.original_url,
-                location=job_data.location,
-                salary=job_data.salary,
-                job_type=job_data.job_type,
-                experience_level=job_data.experience_level,
-                created_at=job_data.created_at,
-                updated_at=job_data.updated_at
-            )
-            jobs.append(job)
-        
-        # Calculate total pages
-        total_pages = (total + per_page - 1) // per_page
+        # Get the actual total count from Marqo index stats
+        marqo_stats = await marqo_service.get_index_stats()
+        total = marqo_stats.get('numberOfDocuments', 0)
+        total_pages = (total + per_page - 1) // per_page if total > 0 else 1
         
         return PaginatedJobsResponse(
             jobs=jobs,
@@ -196,19 +167,13 @@ async def manage_jobs(
         job_ids = action_request.job_ids
         
         if action == "delete":
-            # Delete from both database and Marqo
+            # Delete from Marqo
             deleted_count = 0
             for job_id in job_ids:
-                # Delete from database
-                db_job = db.query(JobMetadataDB).filter(JobMetadataDB.marqo_id == job_id).first()
-                if db_job:
-                    db.delete(db_job)
+                success = await marqo_service.delete_job(job_id)
+                if success:
                     deleted_count += 1
-                
-                # Delete from Marqo (implement in MarqoService if needed)
-                # await marqo_service.delete_job(job_id)
             
-            db.commit()
             return {"message": f"Deleted {deleted_count} jobs", "affected_jobs": deleted_count}
         
         elif action == "refresh":
@@ -216,7 +181,7 @@ async def manage_jobs(
             return {"message": f"Refresh initiated for {len(job_ids)} jobs", "affected_jobs": len(job_ids)}
         
         elif action == "reindex":
-            # Reindex jobs in Marqo
+            # Reindex jobs in Marqo - for now just return success
             return {"message": f"Reindexing initiated for {len(job_ids)} jobs", "affected_jobs": len(job_ids)}
         
         else:
@@ -270,17 +235,14 @@ async def get_analytics_summary(
 async def delete_job(
     job_id: str,
     current_admin: Dict[str, Any] = Depends(get_current_admin),
-    db: Session = Depends(get_db)
+    marqo_service: MarqoService = Depends(get_marqo_service)
 ):
     """Delete a specific job"""
     try:
-        # Delete from database
-        db_job = db.query(JobMetadataDB).filter(JobMetadataDB.marqo_id == job_id).first()
-        if not db_job:
+        # Delete from Marqo
+        success = await marqo_service.delete_job(job_id)
+        if not success:
             raise HTTPException(status_code=404, detail="Job not found")
-        
-        db.delete(db_job)
-        db.commit()
         
         return {"message": "Job deleted successfully", "job_id": job_id}
     except Exception as e:

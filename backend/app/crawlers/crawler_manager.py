@@ -1,19 +1,16 @@
 from typing import List
 import asyncio
 from datetime import datetime
-from sqlalchemy.orm import Session
 
 from .base_crawler import BaseCrawler
 from .job_crawlers import TopCVCrawler, ITViecCrawler, VietnamWorksCrawler, LinkedInCrawler
 from app.models.schemas import JobCreate, CrawlResult, CrawlSourceResult
 from app.services.marqo_service import MarqoService
-from app.services.simple_duplicate_checker import SimpleDuplicateChecker
 
 
 class CrawlerManager:
-    def __init__(self, marqo_service: MarqoService, db: Session = None):
+    def __init__(self, marqo_service: MarqoService):
         self.marqo_service = marqo_service
-        self.db = db
         self.crawlers: List[BaseCrawler] = [
             TopCVCrawler(),
             ITViecCrawler(),
@@ -30,9 +27,6 @@ class CrawlerManager:
         total_already_exist = 0
         all_errors = []
         source_results = {}
-        
-        # Initialize duplicate checker if database session provided
-        duplicate_checker = SimpleDuplicateChecker(self.db) if self.db else None
         
         for crawler in self.crawlers:
             source_start_time = datetime.utcnow()
@@ -72,27 +66,15 @@ class CrawlerManager:
                 # Process each job
                 for job in jobs:
                     try:
-                        is_duplicate = False
-                        
-                        # Use advanced duplicate checking if database available
-                        if duplicate_checker:
-                            is_duplicate, reason = await duplicate_checker.is_duplicate(job)
-                        else:
-                            # Fallback to simple Marqo-based checking
-                            is_duplicate = await self.marqo_service.check_duplicate_job(job)
+                        # Check for duplicates using Marqo
+                        is_duplicate = await self.marqo_service.check_duplicate_job(job)
                         
                         if is_duplicate:
                             duplicates_count += 1
                             continue
                         
-                        # Add job to Marqo (and PostgreSQL if available)
+                        # Add job to Marqo
                         marqo_id = await self.marqo_service.add_job(job)
-                        
-                        # Store in PostgreSQL if duplicate checker available
-                        if duplicate_checker:
-                            content_hash = duplicate_checker.generate_content_hash(job)
-                            await duplicate_checker.store_new_job(job, content_hash, marqo_id)
-                        
                         added_count += 1
                         
                     except Exception as e:
@@ -170,52 +152,37 @@ class CrawlerManager:
             if c.source_name.lower() == source_name.lower():
                 crawler = c
                 break
-        
+
         if not crawler:
             return {
                 'error': f"Crawler for {source_name} not found",
                 'available_sources': [c.source_name for c in self.crawlers]
             }
-        
+
         try:
             if not await crawler.is_available():
                 return {'error': f"{source_name} is not available"}
-            
+
             jobs = await crawler.crawl_jobs(max_jobs)
             added_count = 0
             already_exist_count = 0
-            
-            # Initialize duplicate checker if database session provided
-            duplicate_checker = SimpleDuplicateChecker(self.db) if self.db else None
-            
+
             for job in jobs:
                 try:
-                    is_duplicate = False
-                    
-                    # Use advanced duplicate checking if database available
-                    if duplicate_checker:
-                        is_duplicate, reason = await duplicate_checker.is_duplicate(job)
-                    else:
-                        # Fallback to simple Marqo-based checking
-                        is_duplicate = await self.marqo_service.check_duplicate_job(job)
-                    
+                    # Check for duplicates using Marqo
+                    is_duplicate = await self.marqo_service.check_duplicate_job(job)
+
                     if is_duplicate:
                         already_exist_count += 1
                         continue
-                    
-                    # Add job to Marqo (and PostgreSQL if available)
+
+                    # Add job to Marqo
                     marqo_id = await self.marqo_service.add_job(job)
-                    
-                    # Store in PostgreSQL if duplicate checker available
-                    if duplicate_checker:
-                        content_hash = duplicate_checker.generate_content_hash(job)
-                        await duplicate_checker.store_new_job(job, content_hash, marqo_id)
-                    
                     added_count += 1
-                    
+
                 except Exception as e:
                     print(f"Error processing job: {e}")
-            
+
             return {
                 'source': source_name,
                 'total_crawled': len(jobs),
@@ -223,7 +190,7 @@ class CrawlerManager:
                 'jobs_already_exist': already_exist_count,
                 'success_rate': (added_count / len(jobs) * 100) if len(jobs) > 0 else 0
             }
-            
+
         except Exception as e:
             return {'error': f"Error crawling {source_name}: {e}"}
     

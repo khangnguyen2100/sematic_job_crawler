@@ -1,6 +1,6 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, Boolean, DECIMAL, ForeignKey
+from sqlalchemy import create_engine, Column, String, DateTime, Text, Integer, Boolean, DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.dialects.postgresql import UUID, JSONB, INET
 import uuid
 from datetime import datetime
@@ -25,52 +25,6 @@ class UserInteractionDB(Base):
     action = Column(String(50), nullable=False)
     interaction_metadata = Column(Text)
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
-
-class JobMetadataDB(Base):
-    __tablename__ = "job_metadata"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(String(255), nullable=False, unique=True, index=True)
-    source = Column(String(50), nullable=False, index=True)
-    original_url = Column(Text, nullable=False)
-    crawl_date = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # New columns for deduplication
-    source_job_id = Column(String(255), index=True)
-    content_hash = Column(String(64), index=True)
-    title = Column(String(500))
-    company_name = Column(String(200))
-    description = Column(Text)
-    marqo_id = Column(String(255), index=True)
-    
-    # Additional job details
-    posted_date = Column(DateTime)
-    location = Column(String(200))
-    salary = Column(String(100))
-    job_type = Column(String(50))
-    experience_level = Column(String(50))
-    
-    # System fields
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-class JobDuplicateDB(Base):
-    """Track duplicate jobs that were detected and skipped"""
-    __tablename__ = "job_duplicates"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    original_job_id = Column(UUID(as_uuid=True), ForeignKey('job_metadata.id'), nullable=False, index=True)
-    duplicate_source = Column(String(100), nullable=False)
-    duplicate_source_id = Column(String(255), nullable=False)
-    duplicate_url = Column(Text)
-    detected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    similarity_score = Column(DECIMAL(3,2))  # 0.00 to 1.00
-    duplicate_fields = Column(JSONB)  # Which fields were duplicated
-    detection_method = Column(String(50))  # 'source_id_match', 'content_hash_match', 'fuzzy_match'
-    
-    # Relationship
-    original_job = relationship("JobMetadataDB", backref="duplicates")
 
 class CrawlLogDB(Base):
     """Track crawler requests and responses for monitoring"""

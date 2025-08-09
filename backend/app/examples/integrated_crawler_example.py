@@ -12,25 +12,20 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.models.database import get_db
-from app.models.schemas import JobCreate, JobSource
-from app.services.job_deduplication_service import JobDeduplicationService
-from app.services.crawl_logging_service import CrawlLoggingService, CrawlLogger
+"""
+Integrated Crawler Example - Job Storage Unified in Marqo
 
+This example shows how to use the unified job storage system where all jobs are stored in Marqo
+and duplicate checking is handled by MarqoService.
 
-async def example_crawler_with_integrated_features():
-    """
-    Example crawler that demonstrates integration of:
-    1. Crawl logging (Issue #7)
-    2. Job deduplication (Issue #6)
-    3. Results viewable in Admin Dashboard (Issue #8)
-    """
-    
-    # Get database session
-    db = next(get_db())
-    
-    # Initialize services
-    crawl_logging_service = CrawlLoggingService(db)
-    dedup_service = JobDeduplicationService(db)
+NOTE: This example is deprecated and needs to be updated to work with the new unified storage system.
+For now, it's commented out to avoid import errors.
+"""
+
+# TODO: Update this example to work with the new Marqo-only job storage system
+# The functionality has been moved to MarqoService and CrawlerManager
+
+print("This example is currently disabled. Please see MarqoService and CrawlerManager for current implementation.")
     
     # Example job data from a crawl
     sample_jobs = [

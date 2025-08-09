@@ -22,6 +22,8 @@ class Job(BaseModel):
     salary: Optional[str] = None
     job_type: Optional[str] = None  # Full-time, Part-time, Contract, etc.
     experience_level: Optional[str] = None  # Junior, Senior, etc.
+    source_id: Optional[str] = None  # Source-specific job ID for deduplication
+    content_hash: Optional[str] = None  # Content hash for deduplication
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     search_score: Optional[float] = None  # Relevance score from search

@@ -349,6 +349,24 @@ export const adminApi = {
     const response = await api.post('/admin/data-sources/bulk-create', dataSources);
     return response.data;
   },
+
+  // Sync Jobs
+  syncSiteJobs: async (siteName: string, maxJobs?: number): Promise<any> => {
+    const response = await api.post(`/admin/data-sources/${siteName}/sync`, {
+      max_jobs: maxJobs
+    });
+    return response.data;
+  },
+
+  getAllSyncJobs: async (): Promise<any> => {
+    const response = await api.get('/admin/data-sources/sync/jobs');
+    return response.data;
+  },
+
+  getSyncJobProgress: async (jobId: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/sync/jobs/${jobId}`);
+    return response.data;
+  },
 };
 
 export default api;

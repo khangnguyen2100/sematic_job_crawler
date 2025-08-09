@@ -40,3 +40,60 @@ export interface PaginatedJobsResponse {
   total_pages: number;
   current_page: number;
 }
+
+// Sync Job types
+export interface SyncJobRequest {
+  max_jobs?: number;
+}
+
+export interface SyncJobResponse {
+  job_id: string;
+  message: string;
+  site_name: string;
+}
+
+export enum CrawlStepStatus {
+  PENDING = "pending",
+  RUNNING = "running",
+  COMPLETED = "completed",
+  FAILED = "failed",
+  SKIPPED = "skipped"
+}
+
+export interface CrawlStep {
+  id: string;
+  name: string;
+  description: string;
+  status: CrawlStepStatus;
+  started_at?: string;
+  completed_at?: string;
+  progress_percentage: number;
+  message?: string;
+  error?: string;
+  details: Record<string, any>;
+}
+
+export interface CrawlJobProgress {
+  job_id: string;
+  site_name: string;
+  status: CrawlStepStatus;
+  steps: CrawlStep[];
+  started_at: string;
+  completed_at?: string;
+  total_jobs_found: number;
+  total_jobs_added: number;
+  total_duplicates: number;
+  errors: string[];
+  summary?: string;
+}
+
+// Data Source types
+export interface DataSource {
+  id: string;
+  site_name: string;
+  site_url: string;
+  config: any;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
