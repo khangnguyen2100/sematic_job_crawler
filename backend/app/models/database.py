@@ -78,6 +78,41 @@ class CrawlerConfigDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class CrawlHistoryDB(Base):
+    """Store detailed crawl session history and progress tracking"""
+    __tablename__ = "crawl_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id = Column(String(255), nullable=False, unique=True, index=True)
+    site_name = Column(String(100), nullable=False, index=True)
+    status = Column(String(50), nullable=False, index=True)  # running, completed, failed, cancelled
+    
+    # Crawl configuration
+    crawl_config = Column(JSONB)  # Store the config used for this crawl
+    
+    # Detailed step tracking
+    steps = Column(JSONB)  # Store all steps with their status, timing, and details
+    
+    # Summary statistics
+    total_jobs_found = Column(Integer, default=0)
+    total_jobs_added = Column(Integer, default=0)
+    total_duplicates = Column(Integer, default=0)
+    total_urls_processed = Column(Integer, default=0)
+    
+    # Timing information
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime)
+    duration_seconds = Column(DECIMAL(10,2))
+    
+    # Error tracking
+    errors = Column(JSONB)  # Store any errors that occurred
+    summary = Column(JSONB)  # Store final summary information
+    
+    # Metadata
+    triggered_by = Column(String(100))  # manual, scheduled, api
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 async def init_db():
     """Initialize database tables"""
     try:

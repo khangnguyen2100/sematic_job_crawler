@@ -8,6 +8,7 @@ from .job_crawlers import TopCVCrawler, ITViecCrawler, VietnamWorksCrawler, Link
 from app.models.schemas import JobCreate, CrawlResult, CrawlSourceResult
 from app.services.marqo_service import MarqoService
 from app.services.crawl_logging_service import CrawlLoggingService, CrawlLogger, AsyncCrawlLogger
+from app.services.config_service import config_service
 
 
 class CrawlerManager:
@@ -16,10 +17,10 @@ class CrawlerManager:
         self.db_session = db_session
         self.logging_service = CrawlLoggingService(db_session) if db_session else None
         self.crawlers: List[BaseCrawler] = [
-            TopCVCrawler(),
-            ITViecCrawler(),
-            VietnamWorksCrawler(),
-            LinkedInCrawler()
+            TopCVCrawler(db_session=db_session),
+            ITViecCrawler(db_session=db_session),
+            VietnamWorksCrawler(db_session=db_session),
+            LinkedInCrawler(db_session=db_session)
         ]
     
     async def crawl_all_sources(self, max_jobs_per_source: int = 100) -> CrawlResult:
@@ -42,16 +43,15 @@ class CrawlerManager:
             try:
                 # Use CrawlLogger if logging service is available
                 if self.logging_service:
-                    crawler_type = f"{crawler.source_name.lower()}_crawler"
-                    site_url = f"https://{crawler.source_name.lower()}.com"  # Generic site URL
-                    request_url = site_url  # For now, use same as site URL
+                    # Get dynamic crawler configuration
+                    crawler_info = config_service.get_crawler_info(self.db_session, crawler.source_name)
                     
                     async with AsyncCrawlLogger(
                         self.logging_service,
-                        site_name=crawler.source_name,
-                        site_url=site_url,
-                        request_url=request_url,
-                        crawler_type=crawler_type
+                        site_name=crawler_info['site_name'],
+                        site_url=crawler_info['site_url'],
+                        request_url=crawler_info['site_url'],  # Use site URL as base request URL
+                        crawler_type=crawler_info['crawler_type']
                     ) as logger:
                         # Check if source is available
                         if not await crawler.is_available():

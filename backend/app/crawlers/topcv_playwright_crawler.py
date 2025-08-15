@@ -16,16 +16,18 @@ from bs4 import BeautifulSoup
 
 from app.models.schemas import JobCreate, JobSource
 from app.crawlers.base_crawler import BaseCrawler
-from app.config.topcv_config import TopCVConfig, DEFAULT_TOPCV_CONFIG
+from app.config.topcv_config import TopCVConfig
 
 logger = logging.getLogger(__name__)
 
 class TopCVPlaywrightCrawler(BaseCrawler):
     """Advanced TopCV crawler using Playwright with full configuration support"""
     
-    def __init__(self, config: Optional[TopCVConfig] = None):
+    def __init__(self, config: TopCVConfig):
         super().__init__("TopCV")
-        self.config = config or DEFAULT_TOPCV_CONFIG
+        if not config:
+            raise ValueError("TopCV configuration is required")
+        self.config = config
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.logger = logging.getLogger(__name__)
@@ -235,7 +237,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
                 verify=False  # Disable SSL verification
             ) as client:
                 # First, visit the homepage to establish session
-                homepage_response = await client.get("https://www.topcv.vn")
+                homepage_response = await client.get(self.config.base_url)
                 
                 # Small delay to mimic human behavior
                 await asyncio.sleep(random.uniform(1, 3))
@@ -337,7 +339,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
             await self._init_browser()
         
         jobs = []
-        urls = self.config.get_search_urls()
+        urls = self.config.get_search_urls_from_routes()
         
         logger.info(f"Starting crawl with {len(urls)} URLs, max {max_jobs} jobs")
         logger.info(f"Using request delay: {self.config.request_delay}s")
@@ -346,7 +348,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
         try:
             logger.info("Initializing session by visiting TopCV homepage...")
             init_page = await self.context.new_page()
-            await init_page.goto("https://www.topcv.vn", wait_until='domcontentloaded', timeout=30000)
+            await init_page.goto(self.config.base_url, wait_until='domcontentloaded', timeout=30000)
             await asyncio.sleep(2)  # Let the page settle
             await init_page.close()
             logger.info("Session initialized successfully")
@@ -406,7 +408,7 @@ class TopCVPlaywrightCrawler(BaseCrawler):
             # Set referrer for more natural browsing pattern
             referrer = None
             if url_index > 0:
-                referrer = "https://www.topcv.vn/"
+                referrer = f"{self.config.base_url}/"
             
             # Navigate to page with enhanced options
             response = await page.goto(

@@ -1,5 +1,5 @@
 import { JsonEditor } from '@/components/JsonEditor';
-import { SyncJobModal } from '@/components/SyncJobModal';
+import SyncJobModal from '@/components/SyncJobModal';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { adminApi } from '@/services/api';
 import {
+  Activity,
   CheckCircle,
   Database,
   Edit,
@@ -15,12 +16,11 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Settings,
   TestTube,
   Trash2,
   XCircle
 } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 interface DataSource {
@@ -39,7 +39,8 @@ const DataSourceCard: React.FC<{
   onDelete: (source: DataSource) => void;
   onTest: (source: DataSource) => void;
   onToggleActive: (source: DataSource) => void;
-}> = ({ source, onEdit, onDelete, onTest, onToggleActive }) => {
+  onViewProgress: (source: DataSource) => void;
+}> = ({ source, onEdit, onDelete, onTest, onToggleActive, onViewProgress }) => {
   const getStatusIcon = () => {
     if (source.is_active) {
       return <CheckCircle className="h-5 w-5 text-green-500" />;
@@ -62,6 +63,14 @@ const DataSourceCard: React.FC<{
             </div>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onViewProgress(source)}
+              title="View progress & history"
+            >
+              <Activity className="h-4 w-4" />
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -134,8 +143,6 @@ const DataSourcesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [editingSource, setEditingSource] = useState<DataSource | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isJsonEditorOpen, setIsJsonEditorOpen] = useState(false);
-  const [currentConfig, setCurrentConfig] = useState<any>({});
   const [syncJobModal, setSyncJobModal] = useState<{
     isOpen: boolean;
     jobId: string;
@@ -143,6 +150,13 @@ const DataSourcesPage: React.FC = () => {
   }>({
     isOpen: false,
     jobId: '',
+    siteName: ''
+  });
+  const [progressModal, setProgressModal] = useState<{
+    isOpen: boolean;
+    siteName: string;
+  }>({
+    isOpen: false,
     siteName: ''
   });
   const [syncLoading, setSyncLoading] = useState(false);
@@ -179,18 +193,6 @@ const DataSourcesPage: React.FC = () => {
     }
   };
 
-  const handleCreateSource = async () => {
-    try {
-      await adminApi.createDataSource(formData);
-      await loadDataSources();
-      setIsCreateDialogOpen(false);
-      resetForm();
-    } catch (error) {
-      console.error('Failed to create data source:', error);
-      alert('Failed to create data source. Please check the console for details.');
-    }
-  };
-
   const handleEditSource = (source: DataSource) => {
     setEditingSource(source);
     setFormData({
@@ -199,21 +201,6 @@ const DataSourcesPage: React.FC = () => {
       config: source.config,
       is_active: source.is_active
     });
-    setCurrentConfig(source.config);
-  };
-
-  const handleUpdateSource = async () => {
-    if (!editingSource) return;
-    
-    try {
-      await adminApi.updateDataSource(editingSource.site_name, formData);
-      await loadDataSources();
-      setEditingSource(null);
-      resetForm();
-    } catch (error) {
-      console.error('Failed to update data source:', error);
-      alert('Failed to update data source. Please check the console for details.');
-    }
   };
 
   const handleDeleteSource = async (source: DataSource) => {
@@ -293,13 +280,28 @@ const DataSourcesPage: React.FC = () => {
     }
   };
 
-  const closeSyncJobModal = () => {
+  const closeSyncJobModal = useCallback(() => {
     setSyncJobModal({
       isOpen: false,
       jobId: '',
       siteName: ''
     });
+  }, []);
+
+  const handleViewProgress = (source: DataSource) => {
+    console.log('handleViewProgress:')
+    setProgressModal({
+      isOpen: true,
+      siteName: source.site_name
+    });
   };
+  const closeProgressModal = useCallback(() => {
+    console.log('closeProgressModal:')
+    setProgressModal({
+      isOpen: false,
+      siteName: ''
+    });
+  }, []);
 
   const resetForm = () => {
     setFormData({
@@ -308,18 +310,36 @@ const DataSourcesPage: React.FC = () => {
       config: {},
       is_active: true
     });
-    setCurrentConfig({});
   };
 
   const handleConfigSave = (newConfig: any) => {
     setFormData(prev => ({ ...prev, config: newConfig }));
-    setCurrentConfig(newConfig);
-    setIsJsonEditorOpen(false);
   };
 
-  const openConfigEditor = () => {
-    setCurrentConfig(formData.config);
-    setIsJsonEditorOpen(true);
+  const handleSaveAndUpdate = async () => {
+    if (!editingSource) return;
+    
+    try {
+      await adminApi.updateDataSource(editingSource.site_name, formData);
+      await loadDataSources();
+      setEditingSource(null);
+      resetForm();
+    } catch (error) {
+      console.error('Failed to update data source:', error);
+      alert('Failed to update data source. Please check the console for details.');
+    }
+  };
+
+  const handleSaveAndCreate = async () => {
+    try {
+      await adminApi.createDataSource(formData);
+      await loadDataSources();
+      setIsCreateDialogOpen(false);
+      resetForm();
+    } catch (error) {
+      console.error('Failed to create data source:', error);
+      alert('Failed to create data source. Please check the console for details.');
+    }
   };
 
   const activeSources = sources.filter(source => source.is_active);
@@ -329,7 +349,6 @@ const DataSourcesPage: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p>Loading data sources...</p>
         </div>
       </div>
     );
@@ -446,6 +465,7 @@ const DataSourcesPage: React.FC = () => {
             onDelete={handleDeleteSource}
             onTest={handleTestSource}
             onToggleActive={handleToggleActive}
+            onViewProgress={handleViewProgress}
           />
         ))}
       </div>
@@ -468,7 +488,7 @@ const DataSourcesPage: React.FC = () => {
 
       {/* Create Data Source Dialog */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Data Source</DialogTitle>
             <DialogDescription>
@@ -476,7 +496,7 @@ const DataSourcesPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="site_name">Site Name</Label>
@@ -497,21 +517,6 @@ const DataSourcesPage: React.FC = () => {
                 />
               </div>
             </div>
-            
-            <div>
-              <Label>Configuration</Label>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  readOnly
-                  value={Object.keys(formData.config).length > 0 ? 'Configuration set' : 'No configuration'}
-                  className="flex-1"
-                />
-                <Button onClick={openConfigEditor} variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Edit Config
-                </Button>
-              </div>
-            </div>
 
             <div className="flex items-center space-x-2">
               <Switch
@@ -521,14 +526,25 @@ const DataSourcesPage: React.FC = () => {
               />
               <Label htmlFor="is_active">Active</Label>
             </div>
+            
+            <div className="space-y-2">
+              <Label>Configuration</Label>
+              <JsonEditor
+                isOpen={true}
+                onOpenChange={() => {}} // No-op since we always want it open
+                data={formData.config}
+                onSave={handleConfigSave}
+                hideButtons={true}
+              />
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateSource}>
-              Create Source
+            <Button onClick={handleSaveAndCreate}>
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -536,7 +552,7 @@ const DataSourcesPage: React.FC = () => {
 
       {/* Edit Data Source Dialog */}
       <Dialog open={!!editingSource} onOpenChange={(open) => !open && setEditingSource(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Data Source</DialogTitle>
             <DialogDescription>
@@ -544,7 +560,7 @@ const DataSourcesPage: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="edit_site_name">Site Name</Label>
@@ -565,21 +581,6 @@ const DataSourcesPage: React.FC = () => {
                 />
               </div>
             </div>
-            
-            <div>
-              <Label>Configuration</Label>
-              <div className="flex gap-2 mt-2">
-                <Input
-                  readOnly
-                  value={Object.keys(formData.config).length > 0 ? 'Configuration set' : 'No configuration'}
-                  className="flex-1"
-                />
-                <Button onClick={openConfigEditor} variant="outline">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Edit Config
-                </Button>
-              </div>
-            </div>
 
             <div className="flex items-center space-x-2">
               <Switch
@@ -589,34 +590,27 @@ const DataSourcesPage: React.FC = () => {
               />
               <Label htmlFor="edit_is_active">Active</Label>
             </div>
+            
+            <div className="space-y-2">
+              <Label>Configuration</Label>
+              <JsonEditor
+                isOpen={true}
+                onOpenChange={() => {}} // No-op since we always want it open
+                data={formData.config}
+                onSave={handleConfigSave}
+                hideButtons={true}
+              />
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingSource(null)}>
               Cancel
             </Button>
-            <Button onClick={handleUpdateSource}>
-              Update Source
+            <Button onClick={handleSaveAndUpdate}>
+              Save
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* JSON Editor for Configuration */}
-      <Dialog open={isJsonEditorOpen} onOpenChange={setIsJsonEditorOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>Edit Data Source Configuration</DialogTitle>
-            <DialogDescription>
-              Edit JSON data and click save when finished
-            </DialogDescription>
-          </DialogHeader>
-          <JsonEditor
-            isOpen={isJsonEditorOpen}
-            onOpenChange={setIsJsonEditorOpen}
-            data={currentConfig}
-            onSave={handleConfigSave}
-          />
         </DialogContent>
       </Dialog>
 
@@ -626,6 +620,14 @@ const DataSourcesPage: React.FC = () => {
         onClose={closeSyncJobModal}
         jobId={syncJobModal.jobId}
         siteName={syncJobModal.siteName}
+      />
+
+      {/* Job Progress Modal - Browse Mode */}
+      <SyncJobModal
+        isOpen={progressModal.isOpen}
+        onClose={closeProgressModal}
+        siteName={progressModal.siteName}
+        mode="browse"
       />
     </div>
   );

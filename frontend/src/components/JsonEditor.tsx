@@ -19,6 +19,7 @@ interface JsonEditorProps {
   trigger?: React.ReactNode;
   isOpen?: boolean;
   onOpenChange?: (open: boolean) => void;
+  hideButtons?: boolean;
 }
 
 export const JsonEditor: React.FC<JsonEditorProps> = ({
@@ -28,7 +29,8 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   title = "JSON Editor",
   trigger,
   isOpen: controlledIsOpen,
-  onOpenChange: controlledOnOpenChange
+  onOpenChange: controlledOnOpenChange,
+  hideButtons = false
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const [jsonValue, setJsonValue] = useState('');
@@ -58,8 +60,13 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
       
       // Validate JSON
       try {
-        JSON.parse(value);
+        const parsedData = JSON.parse(value);
         setError(null);
+        
+        // If buttons are hidden and we have valid JSON, auto-save the changes
+        if (hideButtons && onSave) {
+          onSave(parsedData);
+        }
       } catch (_err) {
         setError('Invalid JSON syntax');
       }
@@ -199,39 +206,41 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
           />
         </div>
         
-        <div className="flex items-center justify-between pt-4">
-          <div className="flex gap-2">
-            {!readOnly && (
+        {!hideButtons && (
+          <div className="flex items-center justify-between pt-4">
+            <div className="flex gap-2">
+              {!readOnly && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={formatJson}
+                  disabled={!!error}
+                >
+                  Format JSON
+                </Button>
+              )}
+            </div>
+            
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={formatJson}
-                disabled={!!error}
+                onClick={() => onOpenChange(false)}
               >
-                Format JSON
+                {readOnly ? 'Close' : 'Cancel'}
               </Button>
-            )}
+              {!readOnly && onSave && (
+                <Button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={!!error}
+                >
+                  Save Changes
+                </Button>
+              )}
+            </div>
           </div>
-          
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              {readOnly ? 'Close' : 'Cancel'}
-            </Button>
-            {!readOnly && onSave && (
-              <Button
-                type="button"
-                onClick={handleSave}
-                disabled={!!error}
-              >
-                Save Changes
-              </Button>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     );
   }

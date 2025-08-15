@@ -17,10 +17,10 @@ export { Input } from './ui/input';
 
 // Custom Components
 export { JsonEditor, JsonViewer } from './JsonEditor';
-export { JsonEditorExample } from './JsonEditorExample';
 
 // Layout Components
 export { default as AdminLayout } from './AdminLayout';
 export { default as ProtectedRoute } from './ProtectedRoute';
 export { default as Sidebar } from './Sidebar';
+export { default as SyncJobModal } from './SyncJobModal';
 

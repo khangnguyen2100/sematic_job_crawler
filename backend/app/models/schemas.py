@@ -201,3 +201,69 @@ class JobDuplicateResponse(BaseModel):
     detected_at: datetime
     similarity_score: Optional[float] = None
     duplicate_fields: Dict[str, Any]
+
+# Crawl History Schemas
+class CrawlStepStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+
+class CrawlStep(BaseModel):
+    id: str
+    name: str
+    description: str
+    status: CrawlStepStatus
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    progress_percentage: int = 0
+    message: Optional[str] = None
+    error: Optional[str] = None
+    details: Dict[str, Any] = {}
+
+class CrawlHistoryCreate(BaseModel):
+    job_id: str
+    site_name: str
+    status: str
+    crawl_config: Dict[str, Any] = {}
+    triggered_by: str = "manual"
+
+class CrawlHistoryUpdate(BaseModel):
+    status: Optional[str] = None
+    steps: Optional[List[CrawlStep]] = None
+    total_jobs_found: Optional[int] = None
+    total_jobs_added: Optional[int] = None
+    total_duplicates: Optional[int] = None
+    total_urls_processed: Optional[int] = None
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    errors: Optional[List[str]] = None
+    summary: Optional[Dict[str, Any]] = None
+
+class CrawlHistoryResponse(BaseModel):
+    id: str
+    job_id: str
+    site_name: str
+    status: str
+    crawl_config: Dict[str, Any] = {}
+    steps: List[CrawlStep] = []
+    total_jobs_found: int = 0
+    total_jobs_added: int = 0
+    total_duplicates: int = 0
+    total_urls_processed: int = 0
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+    duration_seconds: Optional[float] = None
+    errors: List[str] = []
+    summary: Optional[Dict[str, Any]] = None
+    triggered_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class CrawlHistoryListResponse(BaseModel):
+    items: List[CrawlHistoryResponse]
+    total: int
+    page: int
+    size: int
+    pages: int

@@ -2,7 +2,7 @@ import { DashboardData, Job, JobSource, SearchRequest, SearchResponse, UploadRes
 import { AdminDashboardStats, AdminLoginRequest, AdminLoginResponse, JobSyncRequest, PaginatedJobsResponse } from '@/types/admin';
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8002/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -370,6 +370,36 @@ export const adminApi = {
 
   getSyncJobProgress: async (jobId: string): Promise<any> => {
     const response = await api.get(`/admin/data-sources/sync/jobs/${jobId}`);
+    return response.data;
+  },
+
+  // Data Source Job Management 
+  getActiveSiteJobs: async (siteName: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}/jobs/active`);
+    return response.data;
+  },
+
+  getSiteJobsHistory: async (siteName: string, limit: number = 20): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}/jobs/history`, {
+      params: { limit }
+    });
+    return response.data;
+  },
+
+  getSiteStatus: async (siteName: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}/status`);
+    return response.data;
+  },
+
+  getCrawlHistory: async (siteName: string, page: number = 1, size: number = 10): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/${siteName}/history`, {
+      params: { page, size }
+    });
+    return response.data;
+  },
+
+  getCrawlHistoryByJobId: async (jobId: string): Promise<any> => {
+    const response = await api.get(`/admin/data-sources/history/${jobId}`);
     return response.data;
   },
 };

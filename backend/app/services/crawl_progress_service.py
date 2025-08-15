@@ -7,36 +7,19 @@ real-time updates to the frontend through progress tracking.
 
 import asyncio
 import uuid
+import requests
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from enum import Enum
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.models.schemas import JobCreate, CrawlResult
+from app.models.schemas import JobCreate, CrawlResult, CrawlStep, CrawlStepStatus
+from app.models.database import CrawlHistoryDB, SessionLocal
 from app.services.marqo_service import MarqoService
 from app.crawlers.crawler_manager import CrawlerManager
 from app.crawlers.topcv_playwright_crawler import TopCVPlaywrightCrawler
 from app.config.topcv_config import TopCVConfig
-
-class CrawlStepStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running" 
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-class CrawlStep(BaseModel):
-    id: str
-    name: str
-    description: str
-    status: CrawlStepStatus = CrawlStepStatus.PENDING
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    progress_percentage: int = 0
-    message: Optional[str] = None
-    error: Optional[str] = None
-    details: Dict[str, Any] = {}
 
 class CrawlJobProgress(BaseModel):
     job_id: str
@@ -52,12 +35,13 @@ class CrawlJobProgress(BaseModel):
     summary: Optional[str] = None
 
 class CrawlProgressService:
-    def __init__(self):
+    def __init__(self, db_session: Optional[Session] = None):
         self.active_jobs: Dict[str, CrawlJobProgress] = {}
         self.completed_jobs: Dict[str, CrawlJobProgress] = {}
         self.max_completed_jobs = 50  # Keep last 50 completed jobs
+        self.db_session = db_session
 
-    def create_crawl_job(self, site_name: str, config: Dict[str, Any]) -> str:
+    def create_crawl_job(self, site_name: str, config: Dict[str, Any], triggered_by: str = "manual") -> str:
         """Create a new crawl job and return its ID"""
         job_id = str(uuid.uuid4())
         
@@ -73,6 +57,28 @@ class CrawlProgressService:
         )
         
         self.active_jobs[job_id] = progress
+        
+        # Save to database
+        try:
+            db = SessionLocal()
+            try:
+                history_record = CrawlHistoryDB(
+                    job_id=job_id,
+                    site_name=site_name,
+                    status="running",
+                    crawl_config=config,
+                    steps=[step.dict() for step in steps],
+                    triggered_by=triggered_by,
+                    started_at=datetime.utcnow()
+                )
+                db.add(history_record)
+                db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Failed to save crawl history to database: {e}")
+            # Continue without database persistence
+        
         return job_id
 
     def _create_steps_for_site(self, site_name: str) -> List[CrawlStep]:
@@ -82,47 +88,56 @@ class CrawlProgressService:
                 CrawlStep(
                     id="1",
                     name="Initialize",
-                    description="Initialize crawler and validate configuration"
+                    description="Initialize crawler and validate configuration",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="2", 
                     name="Check Availability",
-                    description="Check if the target site is accessible"
+                    description="Check if the target site is accessible",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="3",
                     name="Start Browser",
-                    description="Launch browser and set up crawling environment"
+                    description="Launch browser and set up crawling environment",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="4",
                     name="Generate URLs",
-                    description="Generate search URLs based on configuration"
+                    description="Generate search URLs based on configuration",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="5",
                     name="Crawl Jobs",
-                    description="Extract job listings from search results"
+                    description="Extract job listings from search results",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="6",
                     name="Process Jobs",
-                    description="Process and validate job data"
+                    description="Process and validate job data",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="7",
                     name="Check Duplicates",
-                    description="Check for duplicate jobs and filter existing ones"
+                    description="Check for duplicate jobs and filter existing ones",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="8",
                     name="Save Jobs",
-                    description="Save new jobs to database and search index"
+                    description="Save new jobs to database and search index",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="9",
                     name="Cleanup",
-                    description="Clean up resources and generate summary"
+                    description="Clean up resources and generate summary",
+                    status=CrawlStepStatus.PENDING
                 )
             ]
         else:
@@ -131,27 +146,32 @@ class CrawlProgressService:
                 CrawlStep(
                     id="1",
                     name="Initialize",
-                    description="Initialize crawler and validate configuration"
+                    description="Initialize crawler and validate configuration",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="2",
                     name="Check Availability", 
-                    description="Check if the target site is accessible"
+                    description="Check if the target site is accessible",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="3",
                     name="Crawl Jobs",
-                    description="Extract job listings from the site"
+                    description="Extract job listings from the site",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="4",
                     name="Process Jobs",
-                    description="Process and save job data"
+                    description="Process and save job data",
+                    status=CrawlStepStatus.PENDING
                 ),
                 CrawlStep(
                     id="5",
                     name="Finalize",
-                    description="Complete crawling and generate summary"
+                    description="Complete crawling and generate summary",
+                    status=CrawlStepStatus.PENDING
                 )
             ]
 
@@ -188,6 +208,40 @@ class CrawlProgressService:
         
         # Update overall job status
         self._update_job_status(job_id)
+        
+        # Save to database
+        try:
+            db = SessionLocal()
+            try:
+                history_record = db.query(CrawlHistoryDB).filter(
+                    CrawlHistoryDB.job_id == job_id
+                ).first()
+                
+                if history_record:
+                    # Convert steps to JSON-serializable format
+                    steps_data = []
+                    for step in job.steps:
+                        step_dict = step.dict()
+                        # Convert datetime objects to ISO strings
+                        if step_dict.get('started_at'):
+                            step_dict['started_at'] = step_dict['started_at'].isoformat()
+                        if step_dict.get('completed_at'):
+                            step_dict['completed_at'] = step_dict['completed_at'].isoformat()
+                        steps_data.append(step_dict)
+                    
+                    # Update the database record
+                    history_record.steps = steps_data
+                    history_record.status = job.status.value
+                    if job.completed_at:
+                        history_record.completed_at = job.completed_at
+                        history_record.duration_seconds = (job.completed_at - job.started_at).total_seconds()
+                    history_record.updated_at = datetime.utcnow()
+                    db.commit()
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Failed to update crawl history in database: {e}")
+        
         return True
 
     def _update_job_status(self, job_id: str):
@@ -216,6 +270,45 @@ class CrawlProgressService:
         if job_id in self.active_jobs:
             job = self.active_jobs.pop(job_id)
             self.completed_jobs[job_id] = job
+            
+            # Update database record status
+            try:
+                db = SessionLocal()
+                try:
+                    history_record = db.query(CrawlHistoryDB).filter(CrawlHistoryDB.job_id == job_id).first()
+                    if history_record:
+                        # Update status based on job completion
+                        if job.status == CrawlStepStatus.COMPLETED:
+                            history_record.status = "completed"
+                        elif job.status == CrawlStepStatus.FAILED:
+                            history_record.status = "failed"
+                        else:
+                            history_record.status = "completed"  # Default to completed
+                        
+                        # Update completion time and stats
+                        history_record.completed_at = job.completed_at
+                        if job.completed_at and job.started_at:
+                            duration = (job.completed_at - job.started_at).total_seconds()
+                            history_record.duration_seconds = duration
+                        
+                        # Update job statistics
+                        history_record.total_jobs_found = job.total_jobs_found
+                        history_record.total_jobs_added = job.total_jobs_added
+                        history_record.total_duplicates = job.total_duplicates
+                        
+                        # Update steps with final state
+                        history_record.steps = [step.dict() for step in job.steps]
+                        
+                        # Update errors and summary
+                        history_record.errors = job.errors
+                        history_record.summary = job.summary
+                        
+                        db.commit()
+                        print(f"DEBUG: Updated database status for job {job_id} to {history_record.status}")
+                finally:
+                    db.close()
+            except Exception as e:
+                print(f"Failed to update database status for job {job_id}: {e}")
             
             # Maintain max completed jobs limit
             if len(self.completed_jobs) > self.max_completed_jobs:
@@ -259,9 +352,99 @@ class CrawlProgressService:
         if job:
             job.summary = summary
 
+    def get_completed_jobs(self, limit: int = 50) -> List[CrawlJobProgress]:
+        """Get list of completed jobs"""
+        return list(self.completed_jobs.values())[-limit:]
+
+    def get_jobs_by_site(self, site_name: str, include_completed: bool = True) -> List[CrawlJobProgress]:
+        """Get all jobs for a specific site"""
+        jobs = []
+        
+        # Add active jobs
+        for job in self.active_jobs.values():
+            if job.site_name.lower() == site_name.lower():
+                jobs.append(job)
+        
+        # Add completed jobs if requested
+        if include_completed:
+            for job in self.completed_jobs.values():
+                if job.site_name.lower() == site_name.lower():
+                    jobs.append(job)
+        
+        # Sort by started_at (newest first)
+        jobs.sort(key=lambda x: x.started_at, reverse=True)
+        return jobs
+
+    def get_job_history_from_db(self, site_name: Optional[str] = None, limit: int = 50) -> List[CrawlJobProgress]:
+        """Get job history from database"""
+        try:
+            db = SessionLocal()
+            try:
+                query = db.query(CrawlHistoryDB)
+                if site_name:
+                    query = query.filter(CrawlHistoryDB.site_name.ilike(f"%{site_name}%"))
+                
+                records = query.order_by(CrawlHistoryDB.started_at.desc()).limit(limit).all()
+                
+                jobs = []
+                for record in records:
+                    # Convert database record to CrawlJobProgress
+                    steps = []
+                    if record.steps:
+                        for step_data in record.steps:
+                            # Convert ISO strings back to datetime objects
+                            if step_data.get('started_at') and isinstance(step_data['started_at'], str):
+                                step_data['started_at'] = datetime.fromisoformat(step_data['started_at'])
+                            if step_data.get('completed_at') and isinstance(step_data['completed_at'], str):
+                                step_data['completed_at'] = datetime.fromisoformat(step_data['completed_at'])
+                            steps.append(CrawlStep(**step_data))
+                    
+                    # Determine status from record
+                    status = CrawlStepStatus.PENDING
+                    if record.status == "completed":
+                        status = CrawlStepStatus.COMPLETED
+                    elif record.status == "failed":
+                        status = CrawlStepStatus.FAILED
+                    elif record.status == "running":
+                        status = CrawlStepStatus.RUNNING
+                    
+                    job = CrawlJobProgress(
+                        job_id=record.job_id,
+                        site_name=record.site_name,
+                        status=status,
+                        steps=steps,
+                        started_at=record.started_at,
+                        completed_at=record.completed_at,
+                        total_jobs_found=record.total_jobs_found or 0,
+                        total_jobs_added=record.total_jobs_added or 0,
+                        total_duplicates=record.total_duplicates or 0,
+                        errors=record.errors or [],
+                        summary=record.summary
+                    )
+                    jobs.append(job)
+                
+                return jobs
+            finally:
+                db.close()
+        except Exception as e:
+            print(f"Failed to get job history from database: {e}")
+            return []
+
+    def get_active_jobs_for_site(self, site_name: str) -> List[CrawlJobProgress]:
+        """Get active jobs for a specific site"""
+        return [job for job in self.active_jobs.values() 
+                if job.site_name.lower() == site_name.lower()]
+
     async def run_site_crawl(self, job_id: str, site_name: str, config: Dict[str, Any], 
                            marqo_service: MarqoService, db: Session = None) -> CrawlJobProgress:
         """Run the actual crawl job with progress tracking"""
+        
+        # For background tasks, create a new database session to avoid stale connections
+        db_session = None
+        if db is None:
+            from app.models.database import SessionLocal
+            db_session = SessionLocal()
+            db = db_session
         
         # Update initial step
         self.update_step(job_id, "1", CrawlStepStatus.RUNNING, "Initializing crawler...")
@@ -292,24 +475,49 @@ class CrawlProgressService:
                 self._move_to_completed(job_id)
             
             return self.get_job_progress(job_id)
+        finally:
+            # Close the database session if we created it
+            if db_session:
+                db_session.close()
 
     async def _run_topcv_crawl(self, job_id: str, config: Dict[str, Any], 
                               marqo_service: MarqoService, db: Session = None):
         """Run TopCV-specific crawl with detailed progress tracking"""
         
         try:
-            # Step 1: Initialize - already running
-            await asyncio.sleep(0.5)  # Simulate initialization time
-            self.update_step(job_id, "1", CrawlStepStatus.COMPLETED, "Crawler initialized successfully")
+            # Step 1: Initialize - Load configuration from database
+            await asyncio.sleep(0.1)
+            self.update_step(job_id, "1", CrawlStepStatus.RUNNING, "Loading TopCV configuration from database...")
+            
+            # Load configuration from database - no hardcoded fallbacks
+            if not db:
+                self.update_step(job_id, "1", CrawlStepStatus.FAILED, "Database session not available")
+                return
+            
+            from app.services.config_service import config_service
+            try:
+                # Get site configuration from database
+                site_config = config_service.get_site_config(db, "TopCV")
+                if not site_config:
+                    self.update_step(job_id, "1", CrawlStepStatus.FAILED, 
+                                   "TopCV configuration not found in database")
+                    return
+                
+                # Parse configuration
+                topcv_config = config_service.parse_topcv_config(site_config)
+                crawler_info = config_service.get_crawler_info(db, "TopCV")
+                
+                self.update_step(job_id, "1", CrawlStepStatus.COMPLETED, 
+                               f"Configuration loaded successfully from database for {crawler_info['site_url']}")
+            except Exception as e:
+                self.update_step(job_id, "1", CrawlStepStatus.FAILED, 
+                               f"Failed to load TopCV configuration: {str(e)}")
+                return
             
             # Step 2: Check availability
-            self.update_step(job_id, "2", CrawlStepStatus.RUNNING, "Checking TopCV availability...")
-            
-            # Create TopCV config from stored config
-            topcv_config = TopCVConfig(**config)
+            self.update_step(job_id, "2", CrawlStepStatus.RUNNING, f"Checking {crawler_info['site_url']} availability...")
             
             # Test basic connectivity with proper headers (avoid 403)
-            import requests
             try:
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -325,12 +533,12 @@ class CrawlProgressService:
                 }
                 response = requests.get(topcv_config.base_url, headers=headers, timeout=10)
                 if response.status_code == 200:
-                    self.update_step(job_id, "2", CrawlStepStatus.COMPLETED, "TopCV is accessible")
+                    self.update_step(job_id, "2", CrawlStepStatus.COMPLETED, f"{crawler_info['site_name']} is accessible")
                 else:
-                    self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"TopCV returned status code: {response.status_code}")
+                    self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"{crawler_info['site_name']} returned status code: {response.status_code}")
                     return
             except Exception as e:
-                self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"Cannot reach TopCV: {str(e)}")
+                self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"Cannot reach {crawler_info['site_name']}: {str(e)}")
                 return
             
             # Step 3: Start browser
@@ -339,12 +547,24 @@ class CrawlProgressService:
             
             # Step 4: Generate URLs and check for known blocking
             self.update_step(job_id, "4", CrawlStepStatus.RUNNING, "Generating search URLs and checking access...")
-            search_urls = topcv_config.get_search_urls()
+            search_urls = topcv_config.get_search_urls_from_routes()
             
             # Add warning about potential blocking
+            # Show sample URLs from different routes (first URL from each route)
+            sample_urls = []
+            routes_count = len(topcv_config.routes.paths)
+            pages_per_route = topcv_config.max_pages
+            
+            for i in range(min(5, routes_count)):  # Show up to 5 different routes
+                url_index = i * pages_per_route  # First page of each route
+                if url_index < len(search_urls):
+                    sample_urls.append(search_urls[url_index])
+            
             details = {
                 "url_count": len(search_urls), 
-                "urls": search_urls[:5],
+                "urls": sample_urls,
+                "routes_count": routes_count,
+                "pages_per_route": pages_per_route,
                 "note": "TopCV uses Cloudflare protection that may block automated access"
             }
             
@@ -458,23 +678,23 @@ class CrawlProgressService:
                 self.update_step(job_id, "8", CrawlStepStatus.SKIPPED, "No new jobs to save")
                 self.update_job_stats(job_id, total_added=0)
                 
-                # Step 9: Cleanup
-                self.update_step(job_id, "9", CrawlStepStatus.RUNNING, "Cleaning up resources...")
-                await asyncio.sleep(0.5)  # Simulate cleanup time
-                
-                # Generate summary
-                total_found = len(jobs)
-                total_processed = len(processed_jobs)
-                total_new = len(new_jobs)
-                total_added = self.get_job_progress(job_id).total_jobs_added
-                
-                summary = f"Crawl completed successfully! Found {total_found} jobs, processed {total_processed}, identified {total_new} new jobs, and successfully saved {total_added} jobs to the database."
-                
-                if duplicates > 0:
-                    summary += f" Skipped {duplicates} duplicate jobs."
-                
-                self.set_job_summary(job_id, summary)
-                self.update_step(job_id, "9", CrawlStepStatus.COMPLETED, "Cleanup completed successfully")
+            # Step 9: Cleanup (always run regardless of whether jobs were saved)
+            self.update_step(job_id, "9", CrawlStepStatus.RUNNING, "Cleaning up resources...")
+            await asyncio.sleep(0.5)  # Simulate cleanup time
+            
+            # Generate summary
+            total_found = len(jobs)
+            total_processed = len(processed_jobs)
+            total_new = len(new_jobs)
+            total_added = self.get_job_progress(job_id).total_jobs_added
+            
+            summary = f"Crawl completed successfully! Found {total_found} jobs, processed {total_processed}, identified {total_new} new jobs, and successfully saved {total_added} jobs to the database."
+            
+            if duplicates > 0:
+                summary += f" Skipped {duplicates} duplicate jobs."
+            
+            self.set_job_summary(job_id, summary)
+            self.update_step(job_id, "9", CrawlStepStatus.COMPLETED, "Cleanup completed successfully")
                 
         except Exception as e:
             # This will be caught by the outer try-catch and handled appropriately
@@ -485,29 +705,44 @@ class CrawlProgressService:
         """Run generic crawl for non-TopCV sites"""
         
         try:
-            # Step 1: Initialize - already running
-            await asyncio.sleep(0.5)
-            self.update_step(job_id, "1", CrawlStepStatus.COMPLETED, f"Initialized {site_name} crawler")
+            # Step 1: Initialize - Load configuration from database
+            await asyncio.sleep(0.1)
+            self.update_step(job_id, "1", CrawlStepStatus.RUNNING, f"Loading {site_name} configuration from database...")
+            
+            # Load configuration from database - no hardcoded fallbacks
+            if not db:
+                self.update_step(job_id, "1", CrawlStepStatus.FAILED, "Database session not available")
+                return
+            
+            from app.services.config_service import config_service
+            try:
+                # Get crawler info from database
+                crawler_info = config_service.get_crawler_info(db, site_name)
+                if not crawler_info:
+                    self.update_step(job_id, "1", CrawlStepStatus.FAILED, 
+                                   f"{site_name} configuration not found in database")
+                    return
+                
+                self.update_step(job_id, "1", CrawlStepStatus.COMPLETED, 
+                               f"Configuration loaded successfully from database for {crawler_info['site_url']}")
+            except Exception as e:
+                self.update_step(job_id, "1", CrawlStepStatus.FAILED, 
+                               f"Failed to load {site_name} configuration: {str(e)}")
+                return
             
             # Step 2: Check availability
-            self.update_step(job_id, "2", CrawlStepStatus.RUNNING, f"Checking {site_name} availability...")
+            self.update_step(job_id, "2", CrawlStepStatus.RUNNING, f"Checking {crawler_info['site_url']} availability...")
             
-            site_url = config.get("site_url", "")
-            if site_url:
-                try:
-                    import requests
-                    response = requests.get(site_url, timeout=10)
-                    if response.status_code == 200:
-                        self.update_step(job_id, "2", CrawlStepStatus.COMPLETED, f"{site_name} is accessible")
-                    else:
-                        self.update_step(job_id, "2", CrawlStepStatus.FAILED, 
-                                       f"{site_name} returned status code: {response.status_code}")
-                        return
-                except Exception as e:
-                    self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"Cannot reach {site_name}: {str(e)}")
+            try:
+                response = requests.get(crawler_info['site_url'], timeout=10)
+                if response.status_code == 200:
+                    self.update_step(job_id, "2", CrawlStepStatus.COMPLETED, f"{site_name} is accessible")
+                else:
+                    self.update_step(job_id, "2", CrawlStepStatus.FAILED, 
+                                   f"{site_name} returned status code: {response.status_code}")
                     return
-            else:
-                self.update_step(job_id, "2", CrawlStepStatus.FAILED, "No site URL configured")
+            except Exception as e:
+                self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"Cannot reach {site_name}: {str(e)}")
                 return
             
             # Step 3: Crawl jobs (placeholder for now)

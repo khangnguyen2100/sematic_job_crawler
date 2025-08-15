@@ -48,29 +48,12 @@ class AuthConfig:
     DEFAULT_ADMIN_USERNAME = "admin"
     DEFAULT_ADMIN_PASSWORD = "123123"
 
-# Job Sources Configuration
-JOB_SOURCES_CONFIG = {
-    "LinkedIn": {
-        "site_url": "https://www.linkedin.com",
-        "base_url": "https://www.linkedin.com/jobs",
-        "description": "Professional networking platform with global job opportunities"
-    },
-    "TopCV": {
-        "site_url": "https://www.topcv.vn",
-        "base_url": "https://www.topcv.vn",
-        "description": "Leading Vietnamese job portal for all industries"
-    },
-    "ITViec": {
-        "site_url": "https://itviec.com",
-        "base_url": "https://itviec.com",
-        "description": "Specialized IT job platform for Vietnam market"
-    },
-    "VietnamWorks": {
-        "site_url": "https://www.vietnamworks.com",
-        "base_url": "https://www.vietnamworks.com",
-        "description": "Comprehensive job portal covering all Vietnamese industries"
-    }
-}
+# Job Sources Configuration - DEPRECATED
+# All site configurations should be loaded from database via crawler_configs table
+# This hardcoded configuration has been removed to enforce 100% database-driven configuration
+# JOB_SOURCES_CONFIG = {
+#     ... configurations moved to database ...
+# }
 
 # Crawler Configuration
 class CrawlerConfig:
