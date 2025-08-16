@@ -181,7 +181,7 @@ Currently only admin authentication exists.
 - ✅ **PostgreSQL database** with job metadata and relationships
 - ✅ **Scheduled crawling** (daily at 00:00 and 12:00 UTC)
 - ✅ **Manual crawl triggers** via API with real-time status
-- ✅ **Basic duplicate detection** using Marqo similarity
+- ✅ **Basic duplicate detection** using PostgreSQL for faster performance
 - ✅ **Job analytics** and click tracking with user interaction data
 - ✅ **Crawl logging** and monitoring with detailed status tracking
   - ✅ Enhanced crawl logs page with filtering and cleanup

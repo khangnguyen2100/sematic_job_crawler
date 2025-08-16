@@ -92,8 +92,8 @@ class CrawlerManager:
                         # Process each job
                         for job in jobs:
                             try:
-                                # Check for duplicates using Marqo
-                                is_duplicate = await self.marqo_service.check_duplicate_job(job)
+                                # Check for duplicates using PostgreSQL
+                                is_duplicate = self.marqo_service.check_duplicate_job(job, self.db_session)
                                 
                                 if is_duplicate:
                                     duplicates_count += 1

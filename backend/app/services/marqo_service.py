@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config.constants import MarqoConfig, get_marqo_url
 from app.models.schemas import Job, JobCreate, SearchRequest
 from app.services.job_metadata_service import JobMetadataService
+from app.utils.url_utils import clean_job_url
 
 class MarqoService:
     def __init__(self):
@@ -80,7 +81,7 @@ class MarqoService:
                 )
 
     async def add_job(self, job: JobCreate, db: Optional[Session] = None) -> str:
-        """Add a single job to Marqo (after duplicate check should be done)"""
+        """Add a single job to Marqo (after PostgreSQL duplicate check should be done)"""
         job_id = str(uuid.uuid4())
         job_dict = self._job_to_dict(job, job_id)
         
@@ -103,7 +104,7 @@ class MarqoService:
             raise
 
     async def add_jobs_batch(self, jobs: List[JobCreate], db: Optional[Session] = None) -> List[str]:
-        """Add multiple jobs to Marqo in batch (after duplicate check should be done)"""
+        """Add multiple jobs to Marqo in batch (after PostgreSQL duplicate check should be done)"""
         job_ids = []
         job_dicts = []
         urls_to_add = []
@@ -264,98 +265,6 @@ class MarqoService:
         
         # Create synthetic URL
         return f"synthetic://{source}/{content_hash}"
-
-    async def check_duplicate_job_legacy(self, job: JobCreate) -> bool:
-        """
-        Legacy method: Check if a job already exists based on Marqo search
-        This method is slower and kept for backward compatibility
-        Use check_duplicate_job() with PostgreSQL instead
-        """
-        try:
-            import requests
-            import json
-            
-            # 1. Check by source + original_url (primary duplicate check)
-            if job.original_url:
-                filter_query = f"source:{job.source.value} AND original_url:{job.original_url}"
-                
-                search_payload = {
-                    "q": "*",  # Get all matching filter
-                    "limit": 1,
-                    "filter": filter_query
-                }
-                
-                response = await asyncio.get_event_loop().run_in_executor(
-                    self.executor,
-                    lambda: requests.post(
-                        f"{self.marqo_url}/indexes/{self.index_name}/search",
-                        headers={"Content-Type": "application/json"},
-                        data=json.dumps(search_payload)
-                    )
-                )
-                
-                if response.status_code == 200:
-                    results = response.json()
-                    if results.get("hits") and len(results["hits"]) > 0:
-                        return True  # Duplicate found by source + URL
-            
-            # 2. Check by source + source_id if available
-            source_id = getattr(job, 'source_id', None)
-            if source_id:
-                filter_query = f"source:{job.source.value} AND source_id:{source_id}"
-                
-                search_payload = {
-                    "q": "*",
-                    "limit": 1,
-                    "filter": filter_query
-                }
-                
-                response = await asyncio.get_event_loop().run_in_executor(
-                    self.executor,
-                    lambda: requests.post(
-                        f"{self.marqo_url}/indexes/{self.index_name}/search",
-                        headers={"Content-Type": "application/json"},
-                        data=json.dumps(search_payload)
-                    )
-                )
-                
-                if response.status_code == 200:
-                    results = response.json()
-                    if results.get("hits") and len(results["hits"]) > 0:
-                        return True  # Duplicate found by source + source_id
-            
-            # 3. Check by content hash as final fallback
-            import hashlib
-            content = f"{job.title}|{job.company_name}|{job.description}"
-            content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
-            
-            filter_query = f"content_hash:{content_hash}"
-            
-            search_payload = {
-                "q": "*",
-                "limit": 1,
-                "filter": filter_query
-            }
-            
-            response = await asyncio.get_event_loop().run_in_executor(
-                self.executor,
-                lambda: requests.post(
-                    f"{self.marqo_url}/indexes/{self.index_name}/search",
-                    headers={"Content-Type": "application/json"},
-                    data=json.dumps(search_payload)
-                )
-            )
-            
-            if response.status_code == 200:
-                results = response.json()
-                if results.get("hits") and len(results["hits"]) > 0:
-                    return True  # Duplicate found by content hash
-            
-            return False  # No duplicates found
-            
-        except Exception as e:
-            print(f"Error checking duplicate job: {e}")
-            return False  # In case of error, allow the job to be added
 
     async def recreate_index(self) -> bool:
         """Recreate the index with proper tensor fields configuration"""
@@ -530,6 +439,9 @@ class MarqoService:
         
         now = datetime.utcnow()
         
+        # Clean the original URL for consistent storage and duplicate checking
+        clean_url = clean_job_url(job.original_url) if job.original_url else None
+        
         # Generate content hash for duplicate detection
         content = f"{job.title}|{job.company_name}|{job.description}"
         content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
@@ -541,7 +453,7 @@ class MarqoService:
             "company_name": job.company_name,
             "posted_date": job.posted_date.isoformat(),
             "source": job.source.value,
-            "original_url": job.original_url,
+            "original_url": clean_url,  # Store cleaned URL without parameters
             "source_id": getattr(job, 'source_id', None) or "",
             "content_hash": content_hash,
             "location": job.location,

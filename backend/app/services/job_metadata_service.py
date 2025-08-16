@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models.database import JobMetadataDB
 from app.models.schemas import JobCreate
+from app.utils.url_utils import clean_job_url
 
 
 class JobMetadataService:
@@ -15,11 +16,12 @@ class JobMetadataService:
     @staticmethod
     def check_duplicate_by_url(db: Session, url: str) -> bool:
         """
-        Check if a job URL already exists in the database
+        Check if a job URL already exists in the database.
+        URLs are cleaned (parameters removed) before checking to avoid duplicates with different tracking parameters.
         
         Args:
             db: Database session
-            url: Job URL to check
+            url: Job URL to check (will be cleaned automatically)
             
         Returns:
             True if URL already exists (duplicate), False if new
@@ -27,23 +29,53 @@ class JobMetadataService:
         try:
             if not url:
                 return False
+            
+            # Clean the URL by removing query parameters and fragments    
+            clean_url = clean_job_url(url)
+            if not clean_url:
+                print(f"Warning: Could not clean URL: {url}")
+                return False
                 
-            # Fast lookup using indexed URL column
-            existing = db.query(JobMetadataDB).filter(JobMetadataDB.url == url).first()
-            return existing is not None
+            return JobMetadataService._check_duplicate_by_clean_url(db, clean_url)
             
         except Exception as e:
             print(f"Error checking duplicate by URL: {e}")
             return False  # In case of error, allow the job to be added
     
     @staticmethod
-    def add_job_url(db: Session, url: str) -> bool:
+    def _check_duplicate_by_clean_url(db: Session, clean_url: str) -> bool:
         """
-        Add a job URL to the metadata table
+        Check if a clean job URL already exists in the database.
+        Internal method that expects the URL to already be cleaned.
         
         Args:
             db: Database session
-            url: Job URL to add
+            clean_url: Already cleaned job URL to check
+            
+        Returns:
+            True if URL already exists (duplicate), False if new
+        """
+        try:
+            if not clean_url:
+                return False
+                
+            # Fast lookup using indexed URL column
+            existing = db.query(JobMetadataDB).filter(JobMetadataDB.url == clean_url).first()
+            return existing is not None
+            
+        except Exception as e:
+            print(f"Error checking duplicate by clean URL: {e}")
+            return False  # In case of error, allow the job to be added
+    
+    @staticmethod
+    def add_job_url(db: Session, url: str) -> bool:
+        """
+        Add a job URL to the metadata table.
+        URLs are cleaned (parameters removed) before storing to ensure consistent duplicate checking.
+        
+        Args:
+            db: Database session
+            url: Job URL to add (will be cleaned automatically)
             
         Returns:
             True if added successfully, False if already exists or error
@@ -51,8 +83,14 @@ class JobMetadataService:
         try:
             if not url:
                 return False
+            
+            # Clean the URL by removing query parameters and fragments
+            clean_url = clean_job_url(url)
+            if not clean_url:
+                print(f"Warning: Could not clean URL: {url}")
+                return False
                 
-            job_metadata = JobMetadataDB(url=url)
+            job_metadata = JobMetadataDB(url=clean_url)
             db.add(job_metadata)
             db.commit()
             return True
@@ -69,11 +107,12 @@ class JobMetadataService:
     @staticmethod
     def add_job_urls_batch(db: Session, urls: List[str]) -> tuple[int, int]:
         """
-        Add multiple job URLs in batch, handling duplicates gracefully
+        Add multiple job URLs in batch, handling duplicates gracefully.
+        URLs are cleaned (parameters removed) before storing to ensure consistent duplicate checking.
         
         Args:
             db: Database session
-            urls: List of job URLs to add
+            urls: List of job URLs to add (will be cleaned automatically)
             
         Returns:
             Tuple of (added_count, duplicate_count)
@@ -85,15 +124,21 @@ class JobMetadataService:
             for url in urls:
                 if not url:
                     continue
+                
+                # Clean the URL by removing query parameters and fragments
+                clean_url = clean_job_url(url)
+                if not clean_url:
+                    print(f"Warning: Could not clean URL, skipping: {url}")
+                    continue
                     
                 # Check if URL already exists
-                if JobMetadataService.check_duplicate_by_url(db, url):
+                if JobMetadataService._check_duplicate_by_clean_url(db, clean_url):
                     duplicate_count += 1
                     continue
                 
                 # Try to add the URL
                 try:
-                    job_metadata = JobMetadataDB(url=url)
+                    job_metadata = JobMetadataDB(url=clean_url)
                     db.add(job_metadata)
                     db.flush()  # Flush but don't commit yet
                     added_count += 1
@@ -132,11 +177,12 @@ class JobMetadataService:
     @staticmethod
     def delete_job_url(db: Session, url: str) -> bool:
         """
-        Delete a job URL from the metadata table
+        Delete a job URL from the metadata table.
+        URLs are cleaned (parameters removed) before deletion to match the stored format.
         
         Args:
             db: Database session
-            url: Job URL to delete
+            url: Job URL to delete (will be cleaned automatically)
             
         Returns:
             True if deleted successfully, False if not found or error
@@ -144,9 +190,15 @@ class JobMetadataService:
         try:
             if not url:
                 return False
+            
+            # Clean the URL by removing query parameters and fragments
+            clean_url = clean_job_url(url)
+            if not clean_url:
+                print(f"Warning: Could not clean URL: {url}")
+                return False
                 
             # Delete the URL record
-            deleted_count = db.query(JobMetadataDB).filter(JobMetadataDB.url == url).delete()
+            deleted_count = db.query(JobMetadataDB).filter(JobMetadataDB.url == clean_url).delete()
             db.commit()
             
             return deleted_count > 0

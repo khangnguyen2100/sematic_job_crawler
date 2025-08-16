@@ -16,7 +16,7 @@ const JobsPage: React.FC = () => {
   const [selectedSource, setSelectedSource] = useState<string>('');
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   
-  const jobsPerPage = 20;
+  const jobsPerPage = 50;
 
   const loadJobs = async (page: number = 1, source?: string) => {
     try {

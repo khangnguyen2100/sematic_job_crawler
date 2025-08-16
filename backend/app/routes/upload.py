@@ -15,21 +15,9 @@ def get_marqo_service():
     from app.main import marqo_service
     return marqo_service
 
-@router.post(
-    "/upload/csv",
-    response_model=UploadResponse,
-    summary="📁 Upload Jobs CSV",
-    description="Upload and process job data from CSV file with automatic indexing",
-    response_description="Summary of uploaded and processed jobs",
-    tags=["upload"]
-)
-async def upload_csv(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(
-        ..., 
-        description="CSV file containing job data with columns: title, company, description, source, url"
-    ),
-    source: JobSource = Form(JobSource.OTHER, description="Source of the job data"),
+@router.post("/upload/csv", response_model=UploadResponse)
+async def upload_jobs_csv(
+    file: UploadFile = File(...),
     marqo_service: MarqoService = Depends(get_marqo_service),
     db: Session = Depends(get_db)
 ):
@@ -137,8 +125,8 @@ async def upload_csv(
         
         for job in jobs:
             try:
-                # Check for duplicates using Marqo
-                is_duplicate = await marqo_service.check_duplicate_job(job)
+                # Check for duplicates using PostgreSQL
+                is_duplicate = marqo_service.check_duplicate_job(job, db)
                 
                 if not is_duplicate:
                     # Add job to Marqo
@@ -166,7 +154,8 @@ async def upload_csv(
 @router.post("/upload/json", response_model=UploadResponse)
 async def upload_jobs_json(
     jobs_payload: JobBulkUpload,
-    marqo_service: MarqoService = Depends(get_marqo_service)
+    marqo_service: MarqoService = Depends(get_marqo_service),
+    db: Session = Depends(get_db)
 ):
     """Upload jobs from JSON data"""
     
@@ -179,8 +168,8 @@ async def upload_jobs_json(
         
         for i, job in enumerate(jobs_payload.jobs):
             try:
-                # Check for duplicates using Marqo
-                is_duplicate = await marqo_service.check_duplicate_job(job)
+                # Check for duplicates using PostgreSQL
+                is_duplicate = marqo_service.check_duplicate_job(job, db)
                 
                 if not is_duplicate:
                     # Add job to Marqo
