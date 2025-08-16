@@ -43,16 +43,16 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
       description: 'Overview and statistics'
     },
     {
-      label: 'Job Search',
-      icon: <Search className="h-4 w-4" />,
-      path: '/',
-      description: 'Public job search page'
-    },
-    {
       label: 'Jobs Management',
       icon: <Briefcase className="h-4 w-4" />,
       path: '/admin/jobs',
       description: 'Manage job listings'
+    },
+    {
+      label: 'Data Sources',
+      icon: <Database className="h-4 w-4" />,
+      path: '/admin/sources',
+      description: 'Configure crawl sources'
     },
     {
       label: 'Crawl Logs',
@@ -67,29 +67,11 @@ const Sidebar: React.FC<SidebarProps> = ({ className = '' }) => {
       description: 'Platform analytics'
     },
     {
-      label: 'User Management',
-      icon: <Users className="h-4 w-4" />,
-      path: '/admin/users',
-      description: 'Manage users'
+      label: 'Job Search',
+      icon: <Search className="h-4 w-4" />,
+      path: '/',
+      description: 'Public job search page'
     },
-    {
-      label: 'Data Sources',
-      icon: <Database className="h-4 w-4" />,
-      path: '/admin/sources',
-      description: 'Configure crawl sources'
-    },
-    {
-      label: 'Documentation',
-      icon: <BookOpen className="h-4 w-4" />,
-      path: '/admin/docs',
-      description: 'API documentation'
-    },
-    {
-      label: 'Settings',
-      icon: <Settings className="h-4 w-4" />,
-      path: '/admin/settings',
-      description: 'System configuration'
-    }
   ];
 
   const isActivePath = (path: string) => {
