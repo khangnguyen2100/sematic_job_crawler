@@ -78,6 +78,13 @@ class CrawlerConfigDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+class JobMetadataDB(Base):
+    """Store job URLs for duplicate checking - optimized for fast lookups"""
+    __tablename__ = "job_metadata"
+
+    url = Column(Text, primary_key=True, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
 class CrawlHistoryDB(Base):
     """Store detailed crawl session history and progress tracking"""
     __tablename__ = "crawl_history"

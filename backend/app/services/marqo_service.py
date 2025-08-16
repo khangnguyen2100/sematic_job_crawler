@@ -5,9 +5,11 @@ from datetime import datetime
 import uuid
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy.orm import Session
 
 from app.config.constants import MarqoConfig, get_marqo_url
 from app.models.schemas import Job, JobCreate, SearchRequest
+from app.services.job_metadata_service import JobMetadataService
 
 class MarqoService:
     def __init__(self):
@@ -77,8 +79,8 @@ class MarqoService:
                     model="hf/all-MiniLM-L6-v2"
                 )
 
-    async def add_job(self, job: JobCreate) -> str:
-        """Add a single job to Marqo"""
+    async def add_job(self, job: JobCreate, db: Optional[Session] = None) -> str:
+        """Add a single job to Marqo (after duplicate check should be done)"""
         job_id = str(uuid.uuid4())
         job_dict = self._job_to_dict(job, job_id)
         
@@ -90,20 +92,30 @@ class MarqoService:
                     tensor_fields=["title", "description", "company_name"]
                 )
             )
+            
+            # Add URL to job metadata for future duplicate checking
+            if db and job.original_url:
+                JobMetadataService.add_job_url(db, job.original_url)
+            
             return job_id
         except Exception as e:
             print(f"Error adding job to Marqo: {e}")
             raise
 
-    async def add_jobs_batch(self, jobs: List[JobCreate]) -> List[str]:
-        """Add multiple jobs to Marqo in batch"""
+    async def add_jobs_batch(self, jobs: List[JobCreate], db: Optional[Session] = None) -> List[str]:
+        """Add multiple jobs to Marqo in batch (after duplicate check should be done)"""
         job_ids = []
         job_dicts = []
+        urls_to_add = []
         
         for job in jobs:
             job_id = str(uuid.uuid4())
             job_ids.append(job_id)
             job_dicts.append(self._job_to_dict(job, job_id))
+            
+            # Collect URLs for metadata batch insert
+            if job.original_url:
+                urls_to_add.append(job.original_url)
         
         try:
             await asyncio.get_event_loop().run_in_executor(
@@ -113,11 +125,15 @@ class MarqoService:
                     tensor_fields=["title", "description", "company_name"]
                 )
             )
+            
+            # Add URLs to job metadata for future duplicate checking
+            if db and urls_to_add:
+                JobMetadataService.add_job_urls_batch(db, urls_to_add)
+            
             return job_ids
         except Exception as e:
             print(f"Error adding jobs batch to Marqo: {e}")
             raise
-            print(f"Error adding jobs batch to Marqo: {e}")
             raise
 
     async def search_jobs(self, search_request: SearchRequest) -> Dict[str, Any]:
@@ -202,10 +218,58 @@ class MarqoService:
             print(f"Error getting job by ID: {e}")
             return None
 
-    async def check_duplicate_job(self, job: JobCreate) -> bool:
+    def check_duplicate_job(self, job: JobCreate, db: Session) -> bool:
         """
-        Check if a job already exists based on source + original_url combination,
-        or by source + source_id if available, or by content hash
+        Check if a job already exists using PostgreSQL job_metadata table
+        This is much faster than checking Marqo index
+        
+        Args:
+            job: Job to check for duplicates
+            db: Database session
+            
+        Returns:
+            True if job is duplicate, False if new
+        """
+        try:
+            # Primary duplicate check using original_url
+            if job.original_url:
+                return JobMetadataService.check_duplicate_by_url(db, job.original_url)
+            
+            # Fallback: if no original_url, create a synthetic URL from job data
+            # This handles cases where crawlers don't provide original_url
+            synthetic_url = self._generate_synthetic_url(job)
+            return JobMetadataService.check_duplicate_by_url(db, synthetic_url)
+            
+        except Exception as e:
+            print(f"Error checking duplicate job: {e}")
+            return False  # In case of error, allow the job to be added
+    
+    def _generate_synthetic_url(self, job) -> str:
+        """
+        Generate a synthetic URL for jobs without original_url
+        Uses job content to create a unique identifier
+        Accepts both Job and JobCreate objects
+        """
+        import hashlib
+        
+        # Handle both Job and JobCreate objects
+        source = job.source.value if hasattr(job.source, 'value') else job.source
+        title = job.title
+        company_name = job.company_name
+        location = getattr(job, 'location', '') or ''
+        
+        # Create a unique identifier from job content
+        content = f"{source}|{title}|{company_name}|{location}"
+        content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
+        
+        # Create synthetic URL
+        return f"synthetic://{source}/{content_hash}"
+
+    async def check_duplicate_job_legacy(self, job: JobCreate) -> bool:
+        """
+        Legacy method: Check if a job already exists based on Marqo search
+        This method is slower and kept for backward compatibility
+        Use check_duplicate_job() with PostgreSQL instead
         """
         try:
             import requests
@@ -329,13 +393,40 @@ class MarqoService:
             print(f"Error creating index: {e}")
             raise
 
-    async def delete_job(self, job_id: str) -> bool:
-        """Delete a job by ID"""
+    async def delete_job(self, job_id: str, db: Optional[Session] = None) -> bool:
+        """Delete a job by ID from both Marqo and PostgreSQL metadata"""
+        job_url = None
+        
         try:
+            # First, try to get the job to retrieve its URL before deletion
+            if db:
+                try:
+                    job = await self.get_job_by_id(job_id)
+                    if job:
+                        if hasattr(job, 'original_url') and job.original_url:
+                            job_url = job.original_url
+                        else:
+                            # Generate synthetic URL if no original_url
+                            job_url = self._generate_synthetic_url(job)
+                except Exception as e:
+                    print(f"Warning: Could not retrieve job before deletion (will try to clean up metadata): {e}")
+            
+            # Delete from Marqo (always attempt this)
             await asyncio.get_event_loop().run_in_executor(
                 self.executor,
                 lambda: self.client.index(self.index_name).delete_documents([job_id])
             )
+            
+            # Delete from PostgreSQL metadata if we have the URL and database session
+            if db and job_url:
+                deleted = JobMetadataService.delete_job_url(db, job_url)
+                if deleted:
+                    print(f"Successfully deleted job URL from metadata: {job_url}")
+                else:
+                    print(f"Job URL not found in metadata or already deleted: {job_url}")
+            elif db:
+                print("Warning: Could not determine job URL for metadata cleanup")
+            
             return True
         except Exception as e:
             print(f"Error deleting job: {e}")
@@ -352,6 +443,86 @@ class MarqoService:
         except Exception as e:
             print(f"Error getting index stats: {e}")
             return {}
+
+    async def clear_all_documents(self) -> bool:
+        """Clear all documents from the Marqo index"""
+        try:
+            # Get all document IDs in batches due to Marqo limit
+            import requests
+            import json
+            
+            all_document_ids = []
+            offset = 0
+            limit = 1000  # Marqo's maximum limit
+            
+            while True:
+                # Search for documents to get their IDs
+                search_payload = {
+                    "q": "*",
+                    "limit": limit,
+                    "offset": offset,
+                    "searchableAttributes": ["title"]
+                }
+                
+                response = await asyncio.get_event_loop().run_in_executor(
+                    self.executor,
+                    lambda: requests.post(
+                        f"{self.marqo_url}/indexes/{self.index_name}/search",
+                        headers={"Content-Type": "application/json"},
+                        data=json.dumps(search_payload)
+                    )
+                )
+                
+                if response.status_code != 200:
+                    print(f"Failed to search for documents to delete: {response.text}")
+                    return False
+                
+                search_results = response.json()
+                hits = search_results.get("hits", [])
+                
+                if not hits:
+                    break  # No more documents
+                
+                batch_ids = [hit.get("_id") for hit in hits if hit.get("_id")]
+                all_document_ids.extend(batch_ids)
+                
+                print(f"Found {len(batch_ids)} documents (total: {len(all_document_ids)})")
+                
+                # If we got fewer results than the limit, we're done
+                if len(hits) < limit:
+                    break
+                
+                offset += limit
+            
+            if not all_document_ids:
+                print("No documents found to delete")
+                return True
+            
+            print(f"Found total of {len(all_document_ids)} documents to delete")
+            
+            # Delete documents in batches to avoid overwhelming the system
+            batch_size = 100
+            total_deleted = 0
+            
+            for i in range(0, len(all_document_ids), batch_size):
+                batch = all_document_ids[i:i + batch_size]
+                try:
+                    await asyncio.get_event_loop().run_in_executor(
+                        self.executor,
+                        lambda: self.client.index(self.index_name).delete_documents(batch)
+                    )
+                    total_deleted += len(batch)
+                    print(f"Deleted batch of {len(batch)} documents ({total_deleted}/{len(all_document_ids)})")
+                except Exception as e:
+                    print(f"Error deleting batch: {e}")
+                    continue
+            
+            print(f"Successfully deleted {total_deleted} documents from Marqo")
+            return True
+            
+        except Exception as e:
+            print(f"Error clearing all documents: {e}")
+            return False
 
     def _job_to_dict(self, job: JobCreate, job_id: str) -> Dict[str, Any]:
         """Convert JobCreate to dictionary for Marqo"""

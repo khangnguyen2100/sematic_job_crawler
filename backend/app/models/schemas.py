@@ -34,7 +34,7 @@ class JobCreate(BaseModel):
     company_name: str
     posted_date: datetime
     source: JobSource
-    original_url: str
+    original_url: Optional[str] = None
     location: Optional[str] = None
     salary: Optional[str] = None
     job_type: Optional[str] = None

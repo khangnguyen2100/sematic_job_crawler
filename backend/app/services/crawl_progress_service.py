@@ -628,13 +628,13 @@ class CrawlProgressService:
             self.update_step(job_id, "6", CrawlStepStatus.COMPLETED, 
                            f"Processed {len(processed_jobs)} valid jobs")
             
-            # Step 7: Check duplicates
+            # Step 7: Check duplicates using PostgreSQL (much faster)
             self.update_step(job_id, "7", CrawlStepStatus.RUNNING, "Checking for duplicates...")
             new_jobs = []
             duplicates = 0
             
             for i, job in enumerate(processed_jobs):
-                is_duplicate = await marqo_service.check_duplicate_job(job)
+                is_duplicate = marqo_service.check_duplicate_job(job, db)
                 if not is_duplicate:
                     new_jobs.append(job)
                 else:
@@ -660,7 +660,7 @@ class CrawlProgressService:
                 
                 for i, job in enumerate(new_jobs):
                     try:
-                        await marqo_service.add_job(job)
+                        await marqo_service.add_job(job, db)
                         added_count += 1
                     except Exception as e:
                         self.add_job_error(job_id, f"Failed to save job '{job.title}': {str(e)}")

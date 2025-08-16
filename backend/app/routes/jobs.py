@@ -156,11 +156,12 @@ async def get_jobs(
 @router.delete("/jobs/{job_id}")
 async def delete_job(
     job_id: str,
-    marqo_service: MarqoService = Depends(get_marqo_service)
+    marqo_service: MarqoService = Depends(get_marqo_service),
+    db: Session = Depends(get_db)
 ):
     """Delete a job (admin endpoint)"""
     try:
-        success = await marqo_service.delete_job(job_id)
+        success = await marqo_service.delete_job(job_id, db)
         
         if success:
             return {"message": "Job deleted successfully"}

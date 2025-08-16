@@ -167,10 +167,10 @@ async def manage_jobs(
         job_ids = action_request.job_ids
         
         if action == "delete":
-            # Delete from Marqo
+            # Delete from both Marqo and PostgreSQL metadata
             deleted_count = 0
             for job_id in job_ids:
-                success = await marqo_service.delete_job(job_id)
+                success = await marqo_service.delete_job(job_id, db)
                 if success:
                     deleted_count += 1
             
@@ -235,12 +235,13 @@ async def get_analytics_summary(
 async def delete_job(
     job_id: str,
     current_admin: Dict[str, Any] = Depends(get_current_admin),
-    marqo_service: MarqoService = Depends(get_marqo_service)
+    marqo_service: MarqoService = Depends(get_marqo_service),
+    db: Session = Depends(get_db)
 ):
     """Delete a specific job"""
     try:
-        # Delete from Marqo
-        success = await marqo_service.delete_job(job_id)
+        # Delete from both Marqo and PostgreSQL metadata
+        success = await marqo_service.delete_job(job_id, db)
         if not success:
             raise HTTPException(status_code=404, detail="Job not found")
         

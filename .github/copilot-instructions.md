@@ -40,6 +40,15 @@ def get_marqo_service():
 
 ## Development Workflow
 
+### ⚠️ CRITICAL: Check Running Services First
+**ALWAYS check for existing running terminals/processes before starting new ones:**
+
+1. **Check for Backend (port 8002)**: Use `get_task_output` for "🐍 Run Backend" task or check terminals
+2. **Check for Frontend (port 3030)**: Use `get_task_output` for "⚛️ Run Frontend" task or check terminals  
+3. **Verify services**: `curl http://localhost:8002/health` and `curl http://localhost:8882/health`
+
+**Only start new processes if existing ones are not running or have issues.**
+
 ### Running the Stack
 Use VS Code tasks for development:
 - **🐍 Run Backend**: Starts Docker services + Poetry backend with hot reload
@@ -53,6 +62,22 @@ Backend runs on `:8002`, Frontend on `:3030`, Marqo on `:8882`, PostgreSQL on `:
 - Crawler configs: `backend/app/config/*_config.py` files
 
 ### Key Testing/Debug Commands
+
+**Check Running Services First:**
+```bash
+# Check if backend task is running
+get_task_output("🐍 Run Backend")
+
+# Check if frontend task is running  
+get_task_output("⚛️ Run Frontend")
+
+# Verify services are accessible
+curl http://localhost:8002/health
+curl http://localhost:8882/health
+curl http://localhost:3030  # Frontend dev server
+```
+
+**Backend Commands:**
 ```bash
 # Backend in Poetry environment
 cd backend && poetry run python -m pytest
@@ -60,11 +85,10 @@ cd backend && poetry run uvicorn app.main:app --reload
 
 # Test specific crawler
 cd backend && poetry run python test_topcv_integration.py
+```
 
-# Check services health
-curl http://localhost:8002/health
-curl http://localhost:8882/health
-
+**Frontend Commands:**
+```bash
 # Frontend linting (REQUIRED after any frontend changes)
 cd frontend && yarn lint
 

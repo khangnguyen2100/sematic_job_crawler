@@ -152,11 +152,11 @@ class CrawlerManager:
                     
                     for job in jobs:
                         try:
-                            is_duplicate = await self.marqo_service.check_duplicate_job(job)
+                            is_duplicate = self.marqo_service.check_duplicate_job(job, self.db_session)
                             if is_duplicate:
                                 duplicates_count += 1
                                 continue
-                            marqo_id = await self.marqo_service.add_job(job)
+                            marqo_id = await self.marqo_service.add_job(job, self.db_session)
                             added_count += 1
                         except Exception as e:
                             error_msg = f"Error processing job from {crawler.source_name}: {e}"
@@ -240,15 +240,15 @@ class CrawlerManager:
                     
                     for job in jobs:
                         try:
-                            # Check for duplicates
-                            is_duplicate = await self.marqo_service.check_duplicate_job(job)
+                            # Check for duplicates using PostgreSQL (faster)
+                            is_duplicate = self.marqo_service.check_duplicate_job(job, self.db_session)
                             
                             if is_duplicate:
                                 duplicates_count += 1
                                 continue
                             
                             # Add job to Marqo
-                            marqo_id = await self.marqo_service.add_job(job)
+                            marqo_id = await self.marqo_service.add_job(job, self.db_session)
                             added_count += 1
                             
                         except Exception as e:
