@@ -296,8 +296,17 @@ class CrawlProgressService:
                         history_record.total_jobs_added = job.total_jobs_added
                         history_record.total_duplicates = job.total_duplicates
                         
-                        # Update steps with final state
-                        history_record.steps = [step.dict() for step in job.steps]
+                        # Update steps with final state - convert datetime to string for JSON serialization
+                        steps_data = []
+                        for step in job.steps:
+                            step_dict = step.dict()
+                            # Convert datetime objects to ISO format strings
+                            if step_dict.get('started_at'):
+                                step_dict['started_at'] = step_dict['started_at'].isoformat()
+                            if step_dict.get('completed_at'):
+                                step_dict['completed_at'] = step_dict['completed_at'].isoformat()
+                            steps_data.append(step_dict)
+                        history_record.steps = steps_data
                         
                         # Update errors and summary
                         history_record.errors = job.errors
@@ -730,36 +739,131 @@ class CrawlProgressService:
                                f"Failed to load {site_name} configuration: {str(e)}")
                 return
             
-            # Step 2: Check availability
+            # Step 2: Check availability using proper crawler
             self.update_step(job_id, "2", CrawlStepStatus.RUNNING, f"Checking {crawler_info['site_url']} availability...")
             
             try:
-                response = requests.get(crawler_info['site_url'], timeout=10)
-                if response.status_code == 200:
+                # Use the appropriate crawler for availability check with Cloudflare protection
+                if site_name.lower() == "itviec":
+                    from app.crawlers.job_crawlers import ITViecCrawler
+                    crawler = ITViecCrawler(db_session=db)
+                    is_available = await crawler.is_available()
+                elif site_name.lower() == "vietnamworks":
+                    from app.crawlers.job_crawlers import VietnamWorksCrawler
+                    crawler = VietnamWorksCrawler(db_session=db)
+                    is_available = await crawler.is_available()
+                elif site_name.lower() == "linkedin":
+                    from app.crawlers.job_crawlers import LinkedInCrawler
+                    crawler = LinkedInCrawler(db_session=db)
+                    is_available = await crawler.is_available()
+                else:
+                    # Fallback to simple HTTP check for unknown sites
+                    response = requests.get(crawler_info['site_url'], timeout=10)
+                    is_available = response.status_code == 200
+                
+                if is_available:
                     self.update_step(job_id, "2", CrawlStepStatus.COMPLETED, f"{site_name} is accessible")
                 else:
                     self.update_step(job_id, "2", CrawlStepStatus.FAILED, 
-                                   f"{site_name} returned status code: {response.status_code}")
+                                   f"{site_name} is not accessible (possibly blocked by protection)")
                     return
             except Exception as e:
                 self.update_step(job_id, "2", CrawlStepStatus.FAILED, f"Cannot reach {site_name}: {str(e)}")
                 return
             
-            # Step 3: Crawl jobs (placeholder for now)
+            # Step 3: Crawl jobs - Use actual crawler implementation
             self.update_step(job_id, "3", CrawlStepStatus.RUNNING, f"Crawling jobs from {site_name}...")
-            await asyncio.sleep(2)  # Simulate crawling time
             
-            # For now, return mock success for non-TopCV sites
-            self.update_step(job_id, "3", CrawlStepStatus.COMPLETED, f"Crawling not yet implemented for {site_name}")
+            jobs_found = 0
+            jobs_added = 0
+            jobs_duplicated = 0
+            crawl_errors = []
             
-            # Step 4: Process jobs
-            self.update_step(job_id, "4", CrawlStepStatus.SKIPPED, "No jobs to process")
-            
-            # Step 5: Finalize
-            self.update_step(job_id, "5", CrawlStepStatus.COMPLETED, "Crawl completed")
-            
-            summary = f"Crawl for {site_name} completed. Note: Full crawling implementation is not yet available for this site."
-            self.set_job_summary(job_id, summary)
+            try:
+                # Use the actual crawler implementation
+                if site_name.lower() == "itviec":
+                    from app.crawlers.job_crawlers import ITViecCrawler
+                    crawler = ITViecCrawler(db_session=db)
+                elif site_name.lower() == "vietnamworks":
+                    from app.crawlers.job_crawlers import VietnamWorksCrawler
+                    crawler = VietnamWorksCrawler(db_session=db)
+                elif site_name.lower() == "linkedin":
+                    from app.crawlers.job_crawlers import LinkedInCrawler
+                    crawler = LinkedInCrawler(db_session=db)
+                else:
+                    raise ValueError(f"No crawler implementation available for {site_name}")
+                
+                # Crawl jobs using the actual crawler
+                max_jobs = config.get('max_jobs', 100)
+                jobs = await crawler.crawl_jobs(max_jobs)
+                jobs_found = len(jobs)
+                
+                self.update_step(job_id, "3", CrawlStepStatus.COMPLETED, 
+                               f"Found {jobs_found} jobs from {site_name}")
+                
+                # Step 4: Process jobs
+                if jobs_found > 0:
+                    self.update_step(job_id, "4", CrawlStepStatus.RUNNING, f"Processing {jobs_found} jobs...")
+                    
+                    # Process each job
+                    for job in jobs:
+                        try:
+                            # Check for duplicates using PostgreSQL
+                            is_duplicate = marqo_service.check_duplicate_job(job, db)
+                            
+                            if is_duplicate:
+                                jobs_duplicated += 1
+                                continue
+                            
+                            # Add job to Marqo
+                            marqo_id = await marqo_service.add_job(job)
+                            jobs_added += 1
+                            
+                        except Exception as e:
+                            error_msg = f"Error processing job: {str(e)}"
+                            crawl_errors.append(error_msg)
+                    
+                    self.update_step(job_id, "4", CrawlStepStatus.COMPLETED, 
+                                   f"Processed {jobs_found} jobs: {jobs_added} added, {jobs_duplicated} duplicates")
+                else:
+                    self.update_step(job_id, "4", CrawlStepStatus.SKIPPED, "No jobs to process")
+                
+                # Step 5: Finalize
+                self.update_step(job_id, "5", CrawlStepStatus.COMPLETED, "Crawl completed successfully")
+                
+                summary = f"Crawl for {site_name} completed successfully. Found {jobs_found} jobs, added {jobs_added} new jobs, {jobs_duplicated} duplicates."
+                if crawl_errors:
+                    summary += f" Encountered {len(crawl_errors)} errors during processing."
+                self.set_job_summary(job_id, summary)
+                
+                # Update job totals
+                if job_id in self.active_jobs:
+                    self.active_jobs[job_id].total_jobs_found = jobs_found
+                    self.active_jobs[job_id].total_jobs_added = jobs_added
+                    self.active_jobs[job_id].total_duplicates = jobs_duplicated
+                    if crawl_errors:
+                        self.active_jobs[job_id].errors.extend(crawl_errors)
+                    
+                    # Mark job as completed and move to completed jobs
+                    self.active_jobs[job_id].status = CrawlStepStatus.COMPLETED
+                    self.active_jobs[job_id].completed_at = datetime.utcnow()
+                    self._move_to_completed(job_id)
+                        
+            except Exception as e:
+                error_msg = f"Failed to crawl {site_name}: {str(e)}"
+                self.update_step(job_id, "3", CrawlStepStatus.FAILED, error=error_msg)
+                self.update_step(job_id, "4", CrawlStepStatus.SKIPPED, "Crawl failed")
+                self.update_step(job_id, "5", CrawlStepStatus.FAILED, "Crawl failed")
+                
+                summary = f"Crawl for {site_name} failed: {str(e)}"
+                self.set_job_summary(job_id, summary)
+                
+                # Mark job as failed and move to completed jobs
+                if job_id in self.active_jobs:
+                    self.active_jobs[job_id].status = CrawlStepStatus.FAILED
+                    self.active_jobs[job_id].completed_at = datetime.utcnow()
+                    self._move_to_completed(job_id)
+                return
             
         except Exception as e:
             raise e

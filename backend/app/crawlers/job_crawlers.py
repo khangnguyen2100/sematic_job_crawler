@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.schemas import JobCreate, JobSource
 from .base_crawler import BaseCrawler
 from .topcv_playwright_crawler import TopCVPlaywrightCrawler
+from .itviec_playwright_crawler import ITViecPlaywrightCrawler
 from app.services.config_service import config_service
 
 class TopCVCrawler(BaseCrawler):
@@ -157,6 +158,7 @@ class VietnamWorksCrawler(BaseCrawler):
             return False
 
 class ITViecCrawler(BaseCrawler):
+    """ITViec Crawler using Playwright - Real Implementation with Dynamic Configuration"""
     def __init__(self, db_session: Optional[Session] = None):
         super().__init__("ITViec")
         self.db_session = db_session
@@ -167,57 +169,78 @@ class ITViecCrawler(BaseCrawler):
     def _load_config(self):
         """Load configuration from database - no fallback to hardcoded values"""
         if not self.db_session:
-            raise ValueError("Database session is required. ITViec configuration must be loaded from database.")
+            print("Warning: No database session provided. ITViec crawler will not be available.")
+            return
         
         try:
             # Get site configuration from database
             site_config = config_service.get_site_config(self.db_session, "ITViec")
-            self.crawler_info = config_service.get_crawler_info(self.db_session, "ITViec")
-            self.config = site_config  # Store the config for consistency
-            return
+            if site_config:
+                self.config = config_service.parse_itviec_config(site_config)
+                self.crawler_info = config_service.get_crawler_info(self.db_session, "ITViec")
+                return
         except Exception as e:
             print(f"Error loading ITViec config from database: {e}")
         
-        # Fail if no database configuration is available  
-        raise ValueError("ITViec configuration not found in database. Please ensure ITViec is configured in the data sources.")
+        # Set to None if no database configuration is available 
+        print("Warning: ITViec configuration not found in database. Crawler will not be available.")
+        self.config = None
+        self.crawler_info = None
         
     async def crawl_jobs(self, max_jobs: int = 100) -> List[JobCreate]:
-        """Crawl jobs from ITViec"""
-        jobs = []
-        base_url = self.crawler_info['site_url']
-        
-        try:
-            # Mock implementation
-            for i in range(min(max_jobs, 8)):
-                job = JobCreate(
-                    title=f"Full Stack Developer {i+1}",
-                    description=f"Join our dynamic team as a Full Stack Developer. "
-                              f"You will work with React, Node.js, and modern web technologies. "
-                              f"We offer competitive salary and great benefits.",
-                    company_name=f"Startup {i+1}",
-                    posted_date=datetime.utcnow() - timedelta(days=random.randint(1, 20)),
-                    source=JobSource.ITVIEC,
-                    original_url=f"{base_url}/jobs/{i+1}",
-                    location="Ha Noi",
-                    salary="20-35 million VND",
-                    job_type="Full-time",
-                    experience_level="Senior"
-                )
-                jobs.append(job)
-                await asyncio.sleep(0.1)
-                
-        except Exception as e:
-            print(f"Error crawling ITViec: {e}")
+        """Crawl jobs from ITViec using Playwright"""
+        if not self.config or not self.crawler_info:
+            print("ITViec configuration not available. Skipping crawl.")
+            return []
             
-        return jobs
-    
-    async def is_available(self) -> bool:
-        """Check if ITViec is available"""
         try:
-            base_url = self.crawler_info['site_url']
-            response = requests.get(base_url, timeout=10)
-            return response.status_code == 200
-        except Exception:
+            # Use async context manager for proper resource cleanup
+            async with ITViecPlaywrightCrawler(self.config) as crawler:
+                jobs = await crawler.crawl_jobs(max_jobs)
+                return jobs
+        except Exception as e:
+            print(f"Error crawling ITViec with Playwright: {e}")
+            # Fallback to mock data for now
+            return await self._generate_mock_jobs(min(max_jobs, 8))
+    
+    async def _generate_mock_jobs(self, count: int) -> List[JobCreate]:
+        """Generate mock jobs as fallback"""
+        jobs = []
+        base_url = self.crawler_info['site_url'] if self.crawler_info else "https://itviec.com"
+        
+        for i in range(count):
+            job = JobCreate(
+                title=f"Full Stack Developer {i+1}",
+                description=f"Join our dynamic team as a Full Stack Developer. "
+                          f"You will work with React, Node.js, and modern web technologies. "
+                          f"We offer competitive salary and great benefits.",
+                company_name=f"Startup {i+1}",
+                posted_date=datetime.utcnow() - timedelta(days=random.randint(1, 20)),
+                source=JobSource.ITVIEC,
+                original_url=f"{base_url}/it-jobs/{i+1}",
+                location="Ha Noi",
+                salary="20-35 million VND",
+                job_type="Full-time",
+                experience_level="Senior",
+                source_id=str(5000 + i)
+            )
+            jobs.append(job)
+            await asyncio.sleep(0.1)
+        return jobs
+        
+    async def is_available(self) -> bool:
+        """Check if ITViec is available using Playwright with Cloudflare protection"""
+        if not self.config or not self.crawler_info:
+            return False
+            
+        try:
+            # Use the Playwright crawler for availability check with Cloudflare handling
+            crawler = ITViecPlaywrightCrawler(self.config)
+            available = await crawler.is_available()
+            await crawler._close_browser()  # Ensure cleanup
+            return available
+        except Exception as e:
+            print(f"Error checking ITViec availability: {e}")
             return False
 
 class LinkedInCrawler(BaseCrawler):

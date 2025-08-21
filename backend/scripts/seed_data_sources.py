@@ -9,7 +9,6 @@ import asyncio
 import json
 from sqlalchemy.orm import Session
 from app.models.database import SessionLocal, CrawlerConfigDB
-from app.config.constants import JOB_SOURCES_CONFIG
 
 def get_data_source_configs():
     """Define the standard data source configurations"""
@@ -82,16 +81,45 @@ def get_data_source_configs():
             "site_name": "ITViec",
             "site_url": "https://itviec.com",
             "config": {
-                "search_keywords": ["nodejs", "react", "vue", "python", "java"],
-                "max_pages": 3,
+                "params": {
+                    "query": "",
+                    "sort": "published",
+                    "page": "1",
+                    "experience_level": None,
+                    "job_type": None,
+                    "work_mode": None,
+                    "city": None
+                },
+                "routes": {
+                    "paths": [
+                        "it-jobs",
+                        "it-jobs?q=python",
+                        "it-jobs?q=javascript",
+                        "it-jobs?q=java",
+                        "it-jobs?q=nodejs",
+                        "it-jobs?q=react"
+                    ]
+                },
+                "search_keywords": ["python", "javascript", "java", "nodejs", "react", "vue", "angular"],
+                "location_mapping": {
+                    "ho-chi-minh": "Ho Chi Minh City",
+                    "ha-noi": "Ha Noi",
+                    "da-nang": "Da Nang"
+                },
+                "max_pages": 10,
                 "jobs_per_page": 20,
-                "request_delay": 2.0,
-                "timeout": 20,
-                "headless": True,
+                "request_delay": 4.0,
+                "timeout": 60,
+                "headless": False,
+                "enable_human_challenge_solving": True,
+                "challenge_timeout": 180,
                 "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "viewport": {"width": 1920, "height": 1080},
-                "max_description_length": 5000,
-                "required_fields": ["title", "company_name", "original_url"]
+                "max_description_length": 8000,
+                "required_fields": ["title", "company_name", "original_url"],
+                "crawl_company_details": True,
+                "company_page_timeout": 20,
+                "crawler_type": "itviec_playwright_crawler"
             },
             "is_active": True
         },
